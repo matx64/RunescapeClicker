@@ -17,3 +17,7 @@ def mouse_action(key):
 
 def keyboard_action(key):
     keyboard.click(key)
+
+
+def get_mouse_position():
+    return mouse.position()
