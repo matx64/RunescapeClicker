@@ -53,7 +53,7 @@ class MainApplication(tk.Frame):
     def load_info_frame(self):
         self.info_frame = tk.Frame(self)
 
-        self.info_header = tk.Label(self.info_frame, text="Order of Actions:")
+        self.info_header = tk.Label(self.info_frame, text="Order of Actions")
         self.info_header.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
         self.info_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
@@ -134,11 +134,12 @@ class MainApplication(tk.Frame):
     def add_click(self):
         self.mouse_action_btn.config(relief="raised")
         self.mouse_action_btn.config(state="normal")
-        self.new_action_frame.destroy()
+
         self.add_action_info("mouse_click")
         self.exec_order.append(
             (f"mouse_{self.mouse_btn}", self.mouse_position))
-        print(self.exec_order)
+
+        self.new_action_frame.destroy()
 
     def handle_keyboard_action(self):
         self.new_action_frame = tk.Frame(self)
@@ -146,4 +147,32 @@ class MainApplication(tk.Frame):
             self.new_action_frame, text="1", command=self.set1Key)
 
     def handle_new_delay(self):
-        pass
+        self.delay_btn.config(relief="sunken")
+        self.delay_btn.config(state="disabled")
+
+        self.new_delay_frame = tk.Frame(self)
+
+        self.delay_label = tk.Label(
+            self.new_delay_frame, text="Delay in seconds")
+        self.delay_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.delay_input = tk.Entry(self.new_delay_frame, width=10)
+        self.delay_input.insert(0, self.delay)
+        self.delay_input.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.add_delay_btn = tk.Button(
+            self.new_delay_frame, text="Add", command=self.add_delay, fg="black", bg="#03DD5E")
+        self.add_delay_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.new_delay_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
+
+    def add_delay(self):
+        self.delay_btn.config(relief="raised")
+        self.delay_btn.config(state="normal")
+
+        self.delay = self.delay_input.get()
+        self.add_action_info("delay")
+        self.exec_order.append(
+            (f"delay", self.delay))
+
+        self.new_delay_frame.destroy()
