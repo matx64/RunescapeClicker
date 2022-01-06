@@ -14,6 +14,8 @@ class MainApplication(tk.Frame):
         self.keyboard_key = "space"
         self.delay = 0
         self.exec_order = []
+        self.stop_option = 1
+        self.stop_time = 0
         self.pack()
         self.load_header()
         self.load_info_frame()
@@ -22,8 +24,8 @@ class MainApplication(tk.Frame):
         self.master.bind('<KeyPress-F1>', self.on_press)
 
     def on_press(self, event):
-        self.mouse_position = self.mouse.position
         if self.position_input.winfo_exists():
+            self.mouse_position = self.mouse.position
             self.position_input.delete(0, tk.END)
             self.position_input.insert(0, str(self.mouse_position))
 
@@ -45,18 +47,23 @@ class MainApplication(tk.Frame):
         self.delay_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.set_stop_btn = tk.Button(
-            self.header, text="Set Stop", command=self.handle_new_delay, fg="white",  bg="#F9564F")
+            self.header, text="Set Stop", command=self.handle_stop, fg="white",  bg="#F9564F")
         self.set_stop_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.header.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
     def load_info_frame(self):
         self.info_frame = tk.Frame(self)
+        self.info_footer = tk.Frame(self)
 
         self.info_header = tk.Label(self.info_frame, text="Order of Actions:")
         self.info_header.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
         self.info_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.stop_info = tk.Label(self.info_footer)
+        self.stop_info.pack()
+        self.info_footer.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
     def add_action_info(self, type):
         action_label = tk.Label(self.info_frame)
@@ -90,9 +97,9 @@ class MainApplication(tk.Frame):
 
         self.new_mouse_frame = tk.Frame(self)
 
-        self.header_txt = tk.Label(
+        header_txt = tk.Label(
             self.new_mouse_frame, text="Press F1 to get mouse position")
-        self.header_txt.pack(fill=tk.X, padx=5, pady=5, ipadx=5, ipady=5)
+        header_txt.pack(fill=tk.X, padx=5, pady=5, ipadx=5, ipady=5)
 
         self.mouse_btn = "left"
         self.mouseleft_btn = tk.Button(
@@ -143,9 +150,9 @@ class MainApplication(tk.Frame):
 
         self.new_keyboard_frame = tk.Frame(self)
 
-        self.header_txt = tk.Label(
+        header_txt = tk.Label(
             self.new_keyboard_frame, text="Select a keyboard key")
-        self.header_txt.pack(fill=tk.X, padx=5, pady=5, ipadx=5, ipady=5)
+        header_txt.pack(fill=tk.X)
 
         self.key1_btn = tk.Button(
             self.new_keyboard_frame, text="1", command=lambda: self.set_keyboard_key("1"))
@@ -212,9 +219,9 @@ class MainApplication(tk.Frame):
 
         self.new_delay_frame = tk.Frame(self)
 
-        self.delay_label = tk.Label(
+        delay_label = tk.Label(
             self.new_delay_frame, text="Delay in seconds")
-        self.delay_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+        delay_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.delay_input = tk.Entry(self.new_delay_frame, width=10)
         self.delay_input.insert(0, self.delay)
@@ -236,3 +243,52 @@ class MainApplication(tk.Frame):
             (f"delay", self.delay))
 
         self.new_delay_frame.destroy()
+
+    def handle_stop(self):
+        self.set_stop_btn.config(relief="sunken")
+        self.set_stop_btn.config(state="disabled")
+
+        self.new_stop_frame = tk.Frame(self)
+        option1_frame = tk.Frame(self.new_stop_frame)
+        option2_frame = tk.Frame(self.new_stop_frame)
+
+        option1_label = tk.Label(option1_frame, text="Stop on F2 press")
+        option1_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        option1_btn = tk.Button(
+            option1_frame, text="Save", command=lambda: self.add_stop(1))
+        option1_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        option2_label = tk.Label(option2_frame, text="Stop after")
+        option2_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.stop_input = tk.Entry(option2_frame, width=10)
+        self.stop_input.insert(0, self.stop_time)
+        self.stop_input.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        option2_label = tk.Label(option2_frame, text="seconds")
+        option2_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        option2_btn = tk.Button(
+            option2_frame, text="Save", command=lambda: self.add_stop(2))
+        option2_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        option1_frame.pack()
+        option2_frame.pack()
+        self.new_stop_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
+
+    def add_stop(self, option):
+        self.set_stop_btn.config(relief="raised")
+        self.set_stop_btn.config(state="normal")
+
+        self.stop_option = option
+
+        if option == 1:
+            self.stop_time = 0
+
+            self.stop_info.config(text="Stop on F2 press")
+        else:
+            self.stop_time = self.stop_input.get()
+            self.stop_info.config(text=f"Stop after {self.stop_time} seconds")
+
+        self.new_stop_frame.destroy()
