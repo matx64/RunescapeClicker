@@ -53,7 +53,7 @@ class MainApplication(tk.Frame):
     def load_info_frame(self):
         self.info_frame = tk.Frame(self)
 
-        self.info_header = tk.Label(self.info_frame, text="Order of Actions")
+        self.info_header = tk.Label(self.info_frame, text="Order of Actions:")
         self.info_header.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
         self.info_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
@@ -142,6 +142,10 @@ class MainApplication(tk.Frame):
         self.keyboard_action_btn.config(state="disabled")
 
         self.new_keyboard_frame = tk.Frame(self)
+
+        self.header_txt = tk.Label(
+            self.new_keyboard_frame, text="Select a keyboard key")
+        self.header_txt.pack(fill=tk.X, padx=5, pady=5, ipadx=5, ipady=5)
 
         self.key1_btn = tk.Button(
             self.new_keyboard_frame, text="1", command=lambda: self.set_keyboard_key("1"))
