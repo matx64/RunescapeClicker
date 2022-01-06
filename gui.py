@@ -11,19 +11,19 @@ class MainApplication(tk.Frame):
         self.mouse = MouseController()
         self.mouse_position = (100, 100)
         self.mouse_btn = "left"
-        self.keyboard_btn = "space"
+        self.keyboard_key = "space"
         self.delay = 0
         self.exec_order = []
         self.pack()
         self.load_header()
         self.load_info_frame()
-        self.new_action_frame = tk.Frame(self)
-        self.new_action_frame.destroy()
+        self.position_input = tk.Entry(self)
+        self.position_input.destroy()
         self.master.bind('<KeyPress-F1>', self.on_press)
 
     def on_press(self, event):
         self.mouse_position = self.mouse.position
-        if self.new_action_frame.winfo_exists():
+        if self.position_input.winfo_exists():
             self.position_input.delete(0, tk.END)
             self.position_input.insert(0, str(self.mouse_position))
 
@@ -75,9 +75,7 @@ class MainApplication(tk.Frame):
         elif type == "keyboard_press":
             action_label.config(bg="#B30089")
             action_label.config(fg="white")
-            if self.keyboard_btn == "space":
-                action_label.config(
-                    text="Press Space")
+            action_label.config(text=f"Press {self.keyboard_key.capitalize()}")
 
         elif type == "delay":
             action_label.config(bg="#F2BB05")
@@ -90,43 +88,41 @@ class MainApplication(tk.Frame):
         self.mouse_action_btn.config(relief="sunken")
         self.mouse_action_btn.config(state="disabled")
 
-        self.new_action_frame = tk.Frame(self)
+        self.new_mouse_frame = tk.Frame(self)
 
         self.header_txt = tk.Label(
-            self.new_action_frame, text="Press F1 to get mouse position")
+            self.new_mouse_frame, text="Press F1 to get mouse position")
         self.header_txt.pack(fill=tk.X, padx=5, pady=5, ipadx=5, ipady=5)
 
         self.mouse_btn = "left"
         self.mouseleft_btn = tk.Button(
-            self.new_action_frame, text="Mouse Left", command=self.set_mouse_left, relief="sunken")
+            self.new_mouse_frame, text="Mouse Left", command=lambda: self.set_mouse_button("left"), relief="sunken")
         self.mouseleft_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.mouseright_btn = tk.Button(
-            self.new_action_frame, text="Mouse Right", command=self.set_mouse_right)
+            self.new_mouse_frame, text="Mouse Right", command=lambda: self.set_mouse_button("right"))
         self.mouseright_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.position_label = tk.Label(
-            self.new_action_frame, text="on Position:")
+            self.new_mouse_frame, text="on Position:")
         self.position_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
-        self.position_input = tk.Entry(self.new_action_frame, width=25)
+        self.position_input = tk.Entry(self.new_mouse_frame, width=25)
         self.position_input.insert(0, str(self.mouse_position))
         self.position_input.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
         self.add_click_btn = tk.Button(
-            self.new_action_frame, text="Add", command=self.add_click, fg="black", bg="#03DD5E")
+            self.new_mouse_frame, text="Add", command=self.add_click, fg="black", bg="#03DD5E")
         self.add_click_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
-        self.new_action_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
+        self.new_mouse_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
-    def set_mouse_left(self):
-        if self.mouse_btn != "left":
+    def set_mouse_button(self, btn):
+        if self.mouse_btn != "left" and btn == "left":
             self.mouseleft_btn.config(relief="sunken")
             self.mouseright_btn.config(relief="raised")
             self.mouse_btn = "left"
-
-    def set_mouse_right(self):
-        if self.mouse_btn != "right":
+        else:
             self.mouseright_btn.config(relief="sunken")
             self.mouseleft_btn.config(relief="raised")
             self.mouse_btn = "right"
@@ -139,12 +135,72 @@ class MainApplication(tk.Frame):
         self.exec_order.append(
             (f"mouse_{self.mouse_btn}", self.mouse_position))
 
-        self.new_action_frame.destroy()
+        self.new_mouse_frame.destroy()
 
     def handle_keyboard_action(self):
-        self.new_action_frame = tk.Frame(self)
+        self.keyboard_action_btn.config(relief="sunken")
+        self.keyboard_action_btn.config(state="disabled")
+
+        self.new_keyboard_frame = tk.Frame(self)
+
         self.key1_btn = tk.Button(
-            self.new_action_frame, text="1", command=self.set1Key)
+            self.new_keyboard_frame, text="1", command=lambda: self.set_keyboard_key("1"))
+        self.key1_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.key2_btn = tk.Button(
+            self.new_keyboard_frame, text="2", command=lambda: self.set_keyboard_key("2"))
+        self.key2_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.key3_btn = tk.Button(
+            self.new_keyboard_frame, text="3", command=lambda: self.set_keyboard_key("3"))
+        self.key3_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.keyspace_btn = tk.Button(
+            self.new_keyboard_frame, text="space", command=lambda: self.set_keyboard_key("space"))
+        self.keyspace_btn.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.add_keyboard_press_btn = tk.Button(
+            self.new_keyboard_frame, text="Add", command=self.add_keyboard_press, fg="black", bg="#03DD5E")
+        self.add_keyboard_press_btn.pack(
+            side="left", padx=5, pady=5, ipadx=5, ipady=5)
+
+        self.new_keyboard_frame.pack(padx=5, pady=5, ipadx=5, ipady=5)
+
+    def set_keyboard_key(self, key):
+        if key == "1":
+            self.key1_btn.config(relief="sunken")
+            self.key2_btn.config(relief="raised")
+            self.key3_btn.config(relief="raised")
+            self.keyspace_btn.config(relief="raised")
+            self.keyboard_key = "1"
+        elif key == "2":
+            self.key1_btn.config(relief="raised")
+            self.key2_btn.config(relief="sunken")
+            self.key3_btn.config(relief="raised")
+            self.keyspace_btn.config(relief="raised")
+            self.keyboard_key = "2"
+        elif key == "3":
+            self.key1_btn.config(relief="raised")
+            self.key2_btn.config(relief="raised")
+            self.key3_btn.config(relief="sunken")
+            self.keyspace_btn.config(relief="raised")
+            self.keyboard_key = "3"
+        elif key == "space":
+            self.key1_btn.config(relief="raised")
+            self.key2_btn.config(relief="raised")
+            self.key3_btn.config(relief="raised")
+            self.keyspace_btn.config(relief="sunken")
+            self.keyboard_key = "space"
+
+    def add_keyboard_press(self):
+        self.keyboard_action_btn.config(relief="raised")
+        self.keyboard_action_btn.config(state="normal")
+
+        self.add_action_info("keyboard_press")
+        self.exec_order.append(
+            (f"keyboard_press", self.keyboard_key))
+
+        self.new_keyboard_frame.destroy()
 
     def handle_new_delay(self):
         self.delay_btn.config(relief="sunken")
