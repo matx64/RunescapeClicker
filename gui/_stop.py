@@ -52,8 +52,11 @@ def add_stop(self, option):
         self.stop_info.config(
             text=f"Stop after {self.stop_time} seconds OR F2 Press")
 
+    if self.start_btn.winfo_exists():
+        self.start_btn.destroy()
+
     self.start_btn = tk.Button(
-        self.info_footer, text="START", command=self.start, fg="black", bg="#03DD5E")
+        self.info_footer, text="START", command=self.before_start, fg="black", bg="#03DD5E")
     self.start_btn.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
     self.new_stop_frame.destroy()

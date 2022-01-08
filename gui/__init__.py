@@ -27,7 +27,7 @@ class MainApplication(tk.Frame):
         self.stop_time = 0
         self.continue_exec = True
         self.funcs = {"click_mouse_left": self.click_mouse_left,
-                      "click_mouse_right": self.click_mouse_right, "delay": self.delay}
+                      "click_mouse_right": self.click_mouse_right, "delay": self.delay, "press_key": self.press_key}
         self.pack()
         self.load_header()
         self.load_info_frame()
@@ -80,6 +80,11 @@ class MainApplication(tk.Frame):
 
         self.stop_info = tk.Label(self.info_footer)
         self.stop_info.pack(padx=2, pady=2, ipadx=2, ipady=2)
+
+        self.start_btn = tk.Button(
+            self.info_footer, text="START", command=self.start, fg="black", bg="#03DD5E")
+        self.start_btn.destroy()
+
         self.info_footer.pack(padx=5, pady=5, ipadx=5, ipady=5)
 
     def add_action_info(self, type):
@@ -119,8 +124,16 @@ class MainApplication(tk.Frame):
         self.mouse.position = position
         self.mouse.click(Button.right, 1)
 
-    # def keyboard_press(key):
-    #     keyboard.click(key)
+    def press_key(self, key):
+        if key == "space":
+            key = Key.space
+
+        self.keyboard.press(key)
+        self.keyboard.release(key)
+
+    def before_start(self):
+        self.continue_exec = True
+        self.start()
 
     def start(self):
         if(self.continue_exec):

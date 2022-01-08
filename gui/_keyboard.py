@@ -68,6 +68,6 @@ def add_keyboard_press(self):
 
     self.add_action_info("keyboard_press")
     self.exec_order.append(
-        (f"keyboard_press", self.keyboard_key))
+        ("press_key", self.keyboard_key))
 
     self.new_keyboard_frame.destroy()
