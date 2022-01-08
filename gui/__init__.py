@@ -24,6 +24,7 @@ class MainApplication(tk.Frame):
         self.delay_amount = 0
         self.exec_order = []
         self.stop_option = 1
+        self.start_time = None
         self.stop_time = 0
         self.continue_exec = True
         self.funcs = {"click_mouse_left": self.click_mouse_left,
@@ -82,7 +83,7 @@ class MainApplication(tk.Frame):
         self.stop_info.pack(padx=2, pady=2, ipadx=2, ipady=2)
 
         self.start_btn = tk.Button(
-            self.info_footer, text="START", command=self.start, fg="black", bg="#03DD5E")
+            self.info_footer, text="START", command=self.normal_start, fg="black", bg="#03DD5E")
         self.start_btn.destroy()
 
         self.info_footer.pack(padx=5, pady=5, ipadx=5, ipady=5)
@@ -133,10 +134,22 @@ class MainApplication(tk.Frame):
 
     def before_start(self):
         self.continue_exec = True
-        self.start()
 
-    def start(self):
+        if self.stop_option == 2:
+            self.start_time = time.time()
+            self.timed_start()
+        else:
+            self.normal_start()
+
+    def timed_start(self):
+        current_time = time.time()
+        if(self.continue_exec and current_time - self.start_time <= self.stop_time):
+            for action in self.exec_order:
+                self.funcs[action[0]](action[1])
+            self.master.after(1, self.timed_start)
+
+    def normal_start(self):
         if(self.continue_exec):
             for action in self.exec_order:
                 self.funcs[action[0]](action[1])
-            self.master.after(1, self.start)
+            self.master.after(1, self.normal_start)

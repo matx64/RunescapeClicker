@@ -48,7 +48,7 @@ def add_stop(self, option):
 
         self.stop_info.config(text="Stop on F2 press")
     else:
-        self.stop_time = self.stop_input.get()
+        self.stop_time = int(self.stop_input.get())
         self.stop_info.config(
             text=f"Stop after {self.stop_time} seconds OR F2 Press")
 
