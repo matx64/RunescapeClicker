@@ -49,7 +49,8 @@ def add_stop(self, option):
         self.stop_info.config(text="Stop on F2 press")
     else:
         self.stop_time = self.stop_input.get()
-        self.stop_info.config(text=f"Stop after {self.stop_time} seconds")
+        self.stop_info.config(
+            text=f"Stop after {self.stop_time} seconds OR F2 Press")
 
     self.start_btn = tk.Button(
         self.info_footer, text="START", command=self.start, fg="black", bg="#03DD5E")

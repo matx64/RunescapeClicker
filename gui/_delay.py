@@ -12,7 +12,7 @@ def handle_new_delay(self):
     delay_label.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
     self.delay_input = tk.Entry(self.new_delay_frame, width=10)
-    self.delay_input.insert(0, self.delay)
+    self.delay_input.insert(0, self.delay_amount)
     self.delay_input.pack(side="left", padx=5, pady=5, ipadx=5, ipady=5)
 
     self.add_delay_btn = tk.Button(
@@ -26,9 +26,9 @@ def add_delay(self):
     self.delay_btn.config(relief="raised")
     self.delay_btn.config(state="normal")
 
-    self.delay = self.delay_input.get()
+    self.delay_amount = self.delay_input.get()
     self.add_action_info("delay")
     self.exec_order.append(
-        (f"delay", self.delay))
+        (f"delay", int(self.delay_amount)))
 
     self.new_delay_frame.destroy()

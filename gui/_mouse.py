@@ -52,6 +52,6 @@ def add_click(self):
 
     self.add_action_info("mouse_click")
     self.exec_order.append(
-        (f"mouse_{self.mouse_btn}", self.mouse_position))
+        (f"click_mouse_{self.mouse_btn}", self.mouse_position))
 
     self.new_mouse_frame.destroy()

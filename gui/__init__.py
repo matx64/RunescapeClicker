@@ -1,5 +1,9 @@
 import tkinter as tk
-from pynput.mouse import Controller as MouseController
+import time
+from bindglobal import BindGlobal
+from random import random
+from pynput.mouse import Button, Controller as MouseController
+from pynput.keyboard import Listener, Key, Controller as KeyboardController
 
 
 class MainApplication(tk.Frame):
@@ -11,26 +15,36 @@ class MainApplication(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.master = master
+        self.bg = BindGlobal(widget=self.master)
         self.mouse = MouseController()
+        self.keyboard = KeyboardController()
         self.mouse_position = (100, 100)
         self.mouse_btn = "left"
         self.keyboard_key = "space"
-        self.delay = 0
+        self.delay_amount = 0
         self.exec_order = []
         self.stop_option = 1
         self.stop_time = 0
+        self.continue_exec = True
+        self.funcs = {"click_mouse_left": self.click_mouse_left,
+                      "click_mouse_right": self.click_mouse_right, "delay": self.delay}
         self.pack()
         self.load_header()
         self.load_info_frame()
         self.position_input = tk.Entry(self)
         self.position_input.destroy()
-        self.master.bind('<KeyPress-F1>', self.on_press)
 
-    def on_press(self, event):
+        self.bg.gbind('<KeyPress-F1>', self.get_mouse_position)
+        self.bg.gbind('<KeyPress-F2>', self.stop_exec)
+
+    def get_mouse_position(self, event):
         if self.position_input.winfo_exists():
             self.mouse_position = self.mouse.position
             self.position_input.delete(0, tk.END)
             self.position_input.insert(0, str(self.mouse_position))
+
+    def stop_exec(self, event):
+        self.continue_exec = False
 
     def load_header(self):
         self.header = tk.Frame(self)
@@ -90,9 +104,26 @@ class MainApplication(tk.Frame):
         elif type == "delay":
             action_label.config(bg="#F2BB05")
             action_label.config(fg="black")
-            action_label.config(text="{0}s Delay".format(self.delay))
+            action_label.config(text="{0}s Delay".format(self.delay_amount))
 
         action_label.pack(padx=2, pady=2, ipadx=2, ipady=2)
 
+    def delay(self, interval):
+        time.sleep(interval + (random() * 0.1))
+
+    def click_mouse_left(self, position):
+        self.mouse.position = position
+        self.mouse.click(Button.left, 1)
+
+    def click_mouse_right(self, position):
+        self.mouse.position = position
+        self.mouse.click(Button.right, 1)
+
+    # def keyboard_press(key):
+    #     keyboard.click(key)
+
     def start(self):
-        pass
+        if(self.continue_exec):
+            for action in self.exec_order:
+                self.funcs[action[0]](action[1])
+            self.master.after(1, self.start)
