@@ -11,6 +11,9 @@ Runescape Clicker with Graphical Interface developed with Python.
 - Set Delay
 - Set automatic stop after x seconds
 
+## TODO
+- Create executables 
+
 ## Tech
 
 - Python3
