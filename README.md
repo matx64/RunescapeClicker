@@ -1,6 +1,6 @@
 # Runescape Clicker
 
-Runescape Clicker with Graphical Interface developed with Python.
+An open source Runescape Clicker with graphical interface developed in Python.
 
 ![img](./static/main.png)
 
@@ -10,9 +10,6 @@ Runescape Clicker with Graphical Interface developed with Python.
 - Keyboard Press (1, 2, 3, Space)
 - Set Delay
 - Set automatic stop after x seconds
-
-## TODO
-- Create executables 
 
 ## Tech
 
