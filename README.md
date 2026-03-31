@@ -4,7 +4,7 @@ A cross-platform Runescape Clicker with graphical interface built in Rust.
 
 ## Features
 
-- Left or Right Click on desired position (F1 to capture mouse coordinates)
+- Left or Right Click on desired position
 - Keyboard Press (any key)
 - Delay with millisecond precision
 - Automatic stop after N seconds or F2 hotkey
@@ -36,3 +36,9 @@ cargo run --release
 2. Configure the stop condition (F2 only, or timer + F2)
 3. Press START to begin the automation loop
 4. Press F2 or click STOP to halt execution
+
+## Linux Hotkeys
+
+- X11 sessions: global `F1` capture and global `F2` stop are supported.
+- Wayland sessions: `F2` stop only works while the app window is focused.
+- Wayland sessions: mouse-position capture is unavailable in this build, so `X/Y` must be entered manually or captured from an X11 session.

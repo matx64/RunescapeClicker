@@ -2,17 +2,99 @@ use global_hotkey::{
     hotkey::{Code, HotKey, Modifiers},
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
 };
+use std::env;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HotkeySupport {
+    Global,
+    FocusedOnly,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MouseCaptureSupport {
+    Available,
+    UnsupportedOnWayland,
+}
+
+fn is_wayland_session() -> bool {
+    let session_type = env::var("XDG_SESSION_TYPE")
+        .ok()
+        .map(|value| value.to_ascii_lowercase());
+    env::var_os("WAYLAND_DISPLAY").is_some() || matches!(session_type.as_deref(), Some("wayland"))
+}
+
+impl HotkeySupport {
+    pub fn detect() -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            if is_wayland_session() {
+                return Self::FocusedOnly;
+            }
+        }
+
+        Self::Global
+    }
+
+    pub fn stop_hint(self) -> &'static str {
+        match self {
+            Self::Global => "seconds OR F2 press",
+            Self::FocusedOnly => "seconds OR click STOP / press F2 while focused",
+        }
+    }
+
+    pub fn notice(self) -> Option<&'static str> {
+        match self {
+            Self::Global => None,
+            Self::FocusedOnly => {
+                Some("Wayland detected: F2 stop works only while this window is focused.")
+            }
+        }
+    }
+}
+
+impl MouseCaptureSupport {
+    pub fn detect() -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            if is_wayland_session() {
+                return Self::UnsupportedOnWayland;
+            }
+        }
+
+        Self::Available
+    }
+
+    pub fn unsupported_message(self) -> Option<&'static str> {
+        match self {
+            Self::Available => None,
+            Self::UnsupportedOnWayland => Some(
+                "Mouse position capture is unavailable on Wayland in this build. Enter X/Y manually or run under X11.",
+            ),
+        }
+    }
+}
+
 pub struct HotkeyManager {
-    _manager: GlobalHotKeyManager,
-    pub f2_id: u32,
-    pub f1_id: u32,
+    support: HotkeySupport,
+    _manager: Option<GlobalHotKeyManager>,
+    pub f2_id: Option<u32>,
+    pub f1_id: Option<u32>,
 }
 
 impl HotkeyManager {
     pub fn new() -> Result<Self, String> {
+        let support = HotkeySupport::detect();
+        if support == HotkeySupport::FocusedOnly {
+            return Ok(Self {
+                support,
+                _manager: None,
+                f2_id: None,
+                f1_id: None,
+            });
+        }
+
         let manager = GlobalHotKeyManager::new()
             .map_err(|err| format!("Failed to initialize global hotkeys: {err}"))?;
 
@@ -30,10 +112,15 @@ impl HotkeyManager {
             .map_err(|err| format!("Failed to register F1 hotkey: {err}"))?;
 
         Ok(HotkeyManager {
-            _manager: manager,
-            f2_id,
-            f1_id,
+            support,
+            _manager: Some(manager),
+            f2_id: Some(f2_id),
+            f1_id: Some(f1_id),
         })
+    }
+
+    pub fn support(&self) -> HotkeySupport {
+        self.support
     }
 
     pub fn poll(
@@ -42,6 +129,10 @@ impl HotkeyManager {
         captured_position: &Arc<(AtomicI32, AtomicI32)>,
         position_captured: &Arc<AtomicBool>,
     ) -> Option<String> {
+        if self.support != HotkeySupport::Global {
+            return None;
+        }
+
         let mut error_message = None;
 
         while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
@@ -49,33 +140,79 @@ impl HotkeyManager {
                 continue;
             }
 
-            if event.id == self.f2_id {
+            if Some(event.id) == self.f2_id {
                 running.store(false, Ordering::Release);
-            } else if event.id == self.f1_id {
-                match enigo::Enigo::new(&enigo::Settings::default()) {
-                    Ok(enigo) => {
-                        use enigo::Mouse;
-                        match enigo.location() {
-                            Ok(pos) => {
-                                captured_position.0.store(pos.0, Ordering::Relaxed);
-                                captured_position.1.store(pos.1, Ordering::Relaxed);
-                                position_captured.store(true, Ordering::Release);
-                            }
-                            Err(err) => {
-                                error_message =
-                                    Some(format!("Failed to capture mouse position: {err}"));
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        error_message = Some(format!(
-                            "Failed to access the mouse position backend: {err}"
-                        ));
-                    }
+            } else if Some(event.id) == self.f1_id {
+                if let Err(err) = capture_mouse_position(captured_position, position_captured) {
+                    error_message = Some(err);
                 }
             }
         }
 
         error_message
+    }
+}
+
+pub fn capture_mouse_position(
+    captured_position: &Arc<(AtomicI32, AtomicI32)>,
+    position_captured: &Arc<AtomicBool>,
+) -> Result<(), String> {
+    match enigo::Enigo::new(&enigo::Settings::default()) {
+        Ok(enigo) => {
+            use enigo::Mouse;
+            match enigo.location() {
+                Ok(pos) => {
+                    captured_position.0.store(pos.0, Ordering::Relaxed);
+                    captured_position.1.store(pos.1, Ordering::Relaxed);
+                    position_captured.store(true, Ordering::Release);
+                    Ok(())
+                }
+                Err(err) => Err(format!("Failed to capture mouse position: {err}")),
+            }
+        }
+        Err(err) => Err(format!(
+            "Failed to access the mouse position backend: {err}"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn global_hotkeys_are_default_off_linux() {
+        #[cfg(not(target_os = "linux"))]
+        assert_eq!(HotkeySupport::detect(), HotkeySupport::Global);
+    }
+
+    #[test]
+    fn focused_only_support_uses_wayland_copy() {
+        assert_eq!(
+            HotkeySupport::FocusedOnly.stop_hint(),
+            "seconds OR click STOP / press F2 while focused"
+        );
+        assert!(HotkeySupport::FocusedOnly.notice().is_some());
+    }
+
+    #[test]
+    fn global_support_uses_global_hotkey_copy() {
+        assert_eq!(HotkeySupport::Global.stop_hint(), "seconds OR F2 press");
+        assert!(HotkeySupport::Global.notice().is_none());
+    }
+
+    #[test]
+    fn wayland_capture_support_uses_manual_entry_copy() {
+        assert_eq!(
+            MouseCaptureSupport::UnsupportedOnWayland.unsupported_message(),
+            Some(
+                "Mouse position capture is unavailable on Wayland in this build. Enter X/Y manually or run under X11.",
+            )
+        );
+    }
+
+    #[test]
+    fn available_capture_support_has_no_warning() {
+        assert_eq!(MouseCaptureSupport::Available.unsupported_message(), None);
     }
 }
