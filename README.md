@@ -45,5 +45,6 @@ cargo run --release
 ## Wayland Notes
 
 - This build enables `enigo`'s experimental Wayland backend.
+- On Wayland, the app prefers native Wayland injection first and falls back to X11/XWayland when `DISPLAY` is available.
 - Move the app window onto the same monitor as the game before using `Pick On Screen`.
 - Mouse/keyboard injection still depends on compositor support for the relevant virtual-input protocol.
