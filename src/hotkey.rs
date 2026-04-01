@@ -88,7 +88,9 @@ impl MouseCaptureSupport {
         match self {
             Self::Direct => None,
             Self::Picker => {
-                Some("Wayland detected: mouse-position capture uses a fullscreen picker.")
+                Some(
+                    "Wayland detected: mouse-position capture uses a transparent overlay on this window's monitor for windowed or borderless apps.",
+                )
             }
         }
     }
@@ -223,7 +225,9 @@ mod tests {
     fn wayland_capture_support_uses_picker_copy() {
         assert_eq!(
             MouseCaptureSupport::Picker.notice(),
-            Some("Wayland detected: mouse-position capture uses a fullscreen picker.",)
+            Some(
+                "Wayland detected: mouse-position capture uses a transparent overlay on this window's monitor for windowed or borderless apps.",
+            )
         );
     }
 

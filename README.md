@@ -40,9 +40,10 @@ cargo run --release
 
 - X11 sessions: global `F1` capture and global `F2` stop are supported.
 - Wayland sessions: `F2` stop works while the app window is focused.
-- Wayland sessions: `F1` or `Pick On Screen` opens a fullscreen picker so you can click the target point to capture `X/Y`.
+- Wayland sessions: `F1` or `Pick On Screen` opens a transparent overlay on the app window's monitor so you can click the target point to capture `X/Y`.
 
 ## Wayland Notes
 
 - This build enables `enigo`'s experimental Wayland backend.
+- Move the app window onto the same monitor as the game before using `Pick On Screen`.
 - Mouse/keyboard injection still depends on compositor support for the relevant virtual-input protocol.

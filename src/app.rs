@@ -235,10 +235,10 @@ impl App {
                 "Focus this window and press F1, or click Capture"
             }
             (MouseCaptureSupport::Picker, HotkeySupport::Global) => {
-                "Press F1 or click Pick On Screen, then click the target point"
+                "Press F1 or click Pick On Screen, then click the target point on this monitor"
             }
             (MouseCaptureSupport::Picker, HotkeySupport::FocusedOnly) => {
-                "Focus this window and press F1, or click Pick On Screen, then click the target point"
+                "Focus this window and press F1, or click Pick On Screen, then click the target point on this monitor"
             }
         }
     }
@@ -253,7 +253,7 @@ impl App {
     fn platform_notice(&self) -> Option<&'static str> {
         match (self.hotkey_support(), self.mouse_capture_support()) {
             (HotkeySupport::FocusedOnly, MouseCaptureSupport::Picker) => Some(
-                "Wayland detected: F2 stop works only while this window is focused, and mouse capture uses a fullscreen picker.",
+                "Wayland detected: F2 stop works only while this window is focused, and mouse capture uses a transparent overlay on this window's monitor for windowed or borderless apps.",
             ),
             (HotkeySupport::FocusedOnly, MouseCaptureSupport::Direct) => {
                 self.hotkey_support().notice()
@@ -304,35 +304,31 @@ impl App {
 
         self.mouse_capture_picker = Some(Self::current_viewport_restore_state(ctx));
         self.status_message = Some(String::from(
-            "Click the target point to capture the mouse position. Press Esc to cancel.",
+            "Click the target point on this monitor to capture the mouse position. This overlay is intended for windowed or borderless apps. Press Esc to cancel.",
         ));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Resizable(false));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Transparent(true));
         ctx.request_repaint();
     }
 
     fn picker_pos_to_pixels(ctx: &egui::Context, pos: egui::Pos2) -> (i32, i32) {
-        let scale = ctx
-            .input(|input| input.viewport().native_pixels_per_point)
-            .unwrap_or_else(|| ctx.pixels_per_point())
-            .max(1.0);
-        let x = (pos.x * scale).round();
-        let y = (pos.y * scale).round();
-        (x as i32, y as i32)
-    }
-
-    fn complete_mouse_capture_picker(&mut self, ctx: &egui::Context, pos: egui::Pos2) {
-        let (x, y) = Self::picker_pos_to_pixels(ctx, pos);
-        self.mouse_x = x.to_string();
-        self.mouse_y = y.to_string();
-        self.restore_viewport(ctx);
-        self.status_message = Some(format!("Mouse position captured at ({x}, {y})."));
-    }
-
-    fn cancel_mouse_capture_picker(&mut self, ctx: &egui::Context) {
-        self.restore_viewport(ctx);
-        self.status_message = Some(String::from("Mouse position capture cancelled."));
+        ctx.input(|input| {
+            let viewport = input.viewport();
+            let scale = viewport
+                .native_pixels_per_point
+                .unwrap_or_else(|| ctx.pixels_per_point())
+                .max(1.0);
+            let absolute_pos = viewport
+                .inner_rect
+                .map(|rect| rect.min + pos.to_vec2())
+                .unwrap_or(pos);
+            let x = (absolute_pos.x * scale).round();
+            let y = (absolute_pos.y * scale).round();
+            (x as i32, y as i32)
+        })
     }
 
     fn capture_mouse_position(&mut self) {
@@ -354,6 +350,19 @@ impl App {
             MouseCaptureSupport::Direct => self.capture_mouse_position(),
             MouseCaptureSupport::Picker => self.start_mouse_capture_picker(ctx),
         }
+    }
+
+    fn complete_mouse_capture_picker(&mut self, ctx: &egui::Context, pos: egui::Pos2) {
+        let (x, y) = Self::picker_pos_to_pixels(ctx, pos);
+        self.mouse_x = x.to_string();
+        self.mouse_y = y.to_string();
+        self.restore_viewport(ctx);
+        self.status_message = Some(format!("Mouse position captured at ({x}, {y})."));
+    }
+
+    fn cancel_mouse_capture_picker(&mut self, ctx: &egui::Context) {
+        self.restore_viewport(ctx);
+        self.status_message = Some(String::from("Mouse position capture cancelled."));
     }
 
     fn render_mouse_capture_picker(&mut self, ctx: &egui::Context) {
@@ -382,7 +391,7 @@ impl App {
         ctx.request_repaint_after(Duration::from_millis(16));
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_rgba_unmultiplied(8, 12, 18, 245)))
+            .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
                 let rect = ui.max_rect();
                 let painter = ui.painter();
@@ -405,42 +414,44 @@ impl App {
                     );
                     painter.circle_stroke(pos, 12.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
                 }
+            });
 
-                ui.with_layout(
-                    egui::Layout::top_down(egui::Align::Center)
-                        .with_main_align(egui::Align::Center),
-                    |ui| {
-                        ui.add_space(rect.height() * 0.2);
-                        ui.label(
-                            egui::RichText::new("Pick Mouse Position")
-                                .size(30.0)
-                                .strong()
-                                .color(egui::Color32::WHITE),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            egui::RichText::new("Click the target point anywhere on this monitor.")
-                                .size(18.0)
-                                .color(egui::Color32::from_gray(225)),
-                        );
-                        ui.label(
-                            egui::RichText::new("Press Esc to cancel.")
+        egui::Area::new(egui::Id::new("mouse_capture_picker_hud"))
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 24.0))
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(8, 12, 18, 220))
+                    .stroke(egui::Stroke::new(1.0, COLOR_MOUSE.gamma_multiply(0.8)))
+                    .corner_radius(12)
+                    .inner_margin(egui::Margin::symmetric(18, 14))
+                    .show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(
+                                egui::RichText::new("Pick Mouse Position")
+                                    .size(24.0)
+                                    .strong()
+                                    .color(egui::Color32::WHITE),
+                            );
+                            ui.label(
+                                egui::RichText::new(
+                                    "Click the target point on this monitor. Designed for windowed or borderless apps. Press Esc to cancel.",
+                                )
                                 .size(16.0)
-                                .color(egui::Color32::from_gray(200)),
-                        );
-                        ui.add_space(18.0);
-                        let preview_text = match preview {
-                            Some((x, y)) => format!("Preview: ({x}, {y})"),
-                            None => String::from("Move the cursor to preview coordinates"),
-                        };
-                        ui.label(
-                            egui::RichText::new(preview_text)
-                                .size(22.0)
-                                .strong()
-                                .color(COLOR_MOUSE),
-                        );
-                    },
-                );
+                                .color(egui::Color32::from_gray(225)),
+                            );
+                            let preview_text = match preview {
+                                Some((x, y)) => format!("Preview: ({x}, {y})"),
+                                None => String::from("Move the cursor to preview coordinates"),
+                            };
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(preview_text)
+                                    .size(20.0)
+                                    .strong()
+                                    .color(COLOR_MOUSE),
+                            );
+                        });
+                    });
             });
     }
 
@@ -482,6 +493,10 @@ impl Drop for App {
 }
 
 impl eframe::App for App {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        egui::Color32::TRANSPARENT.to_normalized_gamma_f32()
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Poll hotkeys
         if let Some(hotkey_manager) = &self.hotkey_manager {
@@ -596,6 +611,14 @@ impl eframe::App for App {
                                     }
                                     ui.label(self.mouse_capture_hint());
                                 });
+                                if self.mouse_capture_support() == MouseCaptureSupport::Picker {
+                                    ui.label(
+                                        egui::RichText::new(
+                                            "Wayland: the picker opens as a transparent overlay on this window's monitor for windowed or borderless apps. Move this app onto the target monitor first.",
+                                        )
+                                        .color(COLOR_INFO),
+                                    );
+                                }
                                 if ui.button("Add").clicked() {
                                     if let (Ok(x), Ok(y)) =
                                         (self.mouse_x.parse::<i32>(), self.mouse_y.parse::<i32>())
