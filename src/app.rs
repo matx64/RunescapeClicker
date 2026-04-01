@@ -18,8 +18,12 @@ const COLOR_INFO: egui::Color32 = egui::Color32::from_rgb(176, 111, 0);
 const COLOR_STATUS: egui::Color32 = egui::Color32::from_rgb(249, 86, 79);
 const TOOLBAR_BUTTON_HEIGHT: f32 = 46.0;
 const START_BUTTON_SIZE: egui::Vec2 = egui::vec2(140.0, 48.0);
+const TOOLBAR_STACK_BREAKPOINT: f32 = 440.0;
+const FORM_STACK_BREAKPOINT: f32 = 360.0;
+const ACTION_ROW_STACK_BREAKPOINT: f32 = 340.0;
+const ACTION_CONTROL_WIDTH: f32 = 72.0;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum AddingState {
     None,
     MouseClick,
@@ -76,7 +80,6 @@ pub struct App {
 
 impl App {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let (status_tx, status_rx) = mpsc::channel();
         let mut status_message = None;
         let hotkey_manager = match HotkeyManager::new() {
             Ok(manager) => Some(manager),
@@ -89,7 +92,21 @@ impl App {
             .as_ref()
             .map(HotkeyManager::support)
             .unwrap_or_else(HotkeySupport::detect);
-        let mouse_capture_support = MouseCaptureSupport::detect();
+        Self::build(
+            hotkey_manager,
+            hotkey_support,
+            MouseCaptureSupport::detect(),
+            status_message,
+        )
+    }
+
+    fn build(
+        hotkey_manager: Option<HotkeyManager>,
+        hotkey_support: HotkeySupport,
+        mouse_capture_support: MouseCaptureSupport,
+        status_message: Option<String>,
+    ) -> Self {
+        let (status_tx, status_rx) = mpsc::channel();
         Self {
             actions: Vec::new(),
             stop_condition: StopCondition::HotkeyOnly,
@@ -114,11 +131,50 @@ impl App {
         }
     }
 
+    #[cfg(test)]
+    fn new_for_tests() -> Self {
+        Self::build(
+            None,
+            HotkeySupport::FocusedOnly,
+            MouseCaptureSupport::Direct,
+            None,
+        )
+    }
+
     fn toggle_adding(&mut self, state: AddingState) {
         if self.adding == state {
             self.adding = AddingState::None;
         } else {
-            self.adding = state;
+            match state {
+                AddingState::MouseClick => self.open_mouse_click_form(),
+                _ => self.adding = state,
+            }
+        }
+    }
+
+    fn open_mouse_click_form(&mut self) {
+        self.mouse_x.clear();
+        self.mouse_y.clear();
+        self.adding = AddingState::MouseClick;
+    }
+
+    fn finish_mouse_click_add(&mut self, x: i32, y: i32) {
+        self.actions.push(Action::MouseClick {
+            button: self.mouse_button.clone(),
+            x,
+            y,
+        });
+        self.mouse_x.clear();
+        self.mouse_y.clear();
+        self.adding = AddingState::None;
+    }
+
+    fn try_add_mouse_click(&mut self) -> bool {
+        if let (Ok(x), Ok(y)) = (self.mouse_x.parse::<i32>(), self.mouse_y.parse::<i32>()) {
+            self.finish_mouse_click_add(x, y);
+            true
+        } else {
+            false
         }
     }
 
@@ -165,6 +221,18 @@ impl App {
 
     fn worker_active(&self) -> bool {
         self.worker_handle.is_some()
+    }
+
+    fn toolbar_stacks(available_width: f32) -> bool {
+        available_width < TOOLBAR_STACK_BREAKPOINT
+    }
+
+    fn form_stacks(available_width: f32) -> bool {
+        available_width < FORM_STACK_BREAKPOINT
+    }
+
+    fn action_row_stacks(available_width: f32) -> bool {
+        available_width < ACTION_ROW_STACK_BREAKPOINT
     }
 
     fn poll_status_messages(&mut self) {
@@ -483,6 +551,369 @@ impl App {
                 Some(String::from("Stop requested from the focused window (F2)."));
         }
     }
+
+    fn render_toolbar(&mut self, ui: &mut egui::Ui, worker_active: bool) {
+        let available_width = ui.available_width().max(0.0);
+
+        ui.add_enabled_ui(!worker_active, |ui| {
+            if Self::toolbar_stacks(available_width) {
+                for (label, accent, state) in [
+                    ("Add Mouse Click", COLOR_MOUSE, AddingState::MouseClick),
+                    ("Add Keyboard Press", COLOR_KEYBOARD, AddingState::KeyPress),
+                    ("Add Delay", COLOR_DELAY, AddingState::Delay),
+                ] {
+                    if ui
+                        .add_sized(
+                            [ui.available_width(), TOOLBAR_BUTTON_HEIGHT],
+                            Self::toolbar_button(label, accent),
+                        )
+                        .clicked()
+                    {
+                        self.toggle_adding(state);
+                    }
+                }
+            } else {
+                let button_spacing = ui.spacing().item_spacing.x;
+                let button_width = ((available_width - (button_spacing * 2.0)) / 3.0).max(0.0);
+
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_sized(
+                            [button_width, TOOLBAR_BUTTON_HEIGHT],
+                            Self::toolbar_button("Add Mouse Click", COLOR_MOUSE),
+                        )
+                        .clicked()
+                    {
+                        self.toggle_adding(AddingState::MouseClick);
+                    }
+                    if ui
+                        .add_sized(
+                            [button_width, TOOLBAR_BUTTON_HEIGHT],
+                            Self::toolbar_button("Add Keyboard Press", COLOR_KEYBOARD),
+                        )
+                        .clicked()
+                    {
+                        self.toggle_adding(AddingState::KeyPress);
+                    }
+                    if ui
+                        .add_sized(
+                            [button_width, TOOLBAR_BUTTON_HEIGHT],
+                            Self::toolbar_button("Add Delay", COLOR_DELAY),
+                        )
+                        .clicked()
+                    {
+                        self.toggle_adding(AddingState::Delay);
+                    }
+                });
+            }
+        });
+    }
+
+    fn render_mouse_click_form(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.label("Mouse Click:");
+            ui.horizontal_wrapped(|ui| {
+                ui.radio_value(&mut self.mouse_button, MouseButton::Left, "Left");
+                ui.radio_value(&mut self.mouse_button, MouseButton::Right, "Right");
+            });
+
+            if Self::form_stacks(ui.available_width()) {
+                ui.label("X:");
+                ui.add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::TextEdit::singleline(&mut self.mouse_x),
+                );
+                ui.label("Y:");
+                ui.add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::TextEdit::singleline(&mut self.mouse_y),
+                );
+
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 0.0],
+                        egui::Button::new(self.mouse_capture_button_label()),
+                    )
+                    .clicked()
+                {
+                    self.begin_mouse_capture(ui.ctx());
+                }
+                ui.label(self.mouse_capture_hint());
+            } else {
+                let field_width =
+                    ((ui.available_width() - ui.spacing().item_spacing.x) / 2.0).max(120.0);
+
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label("X:");
+                        ui.add_sized(
+                            [field_width, 0.0],
+                            egui::TextEdit::singleline(&mut self.mouse_x),
+                        );
+                    });
+                    ui.vertical(|ui| {
+                        ui.label("Y:");
+                        ui.add_sized(
+                            [field_width, 0.0],
+                            egui::TextEdit::singleline(&mut self.mouse_y),
+                        );
+                    });
+                });
+
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button(self.mouse_capture_button_label()).clicked() {
+                        self.begin_mouse_capture(ui.ctx());
+                    }
+                    ui.label(self.mouse_capture_hint());
+                });
+            }
+
+            if self.mouse_capture_support() == MouseCaptureSupport::Picker {
+                ui.label(
+                    egui::RichText::new(
+                        "Wayland: the picker opens as a transparent overlay on this window's monitor for windowed or borderless apps. Move this app onto the target monitor first.",
+                    )
+                    .color(COLOR_INFO),
+                );
+            }
+
+            if ui
+                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
+                .clicked()
+            {
+                self.try_add_mouse_click();
+            }
+        });
+    }
+
+    fn render_key_press_form(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.label("Key Press:");
+            ui.horizontal_wrapped(|ui| {
+                let keys = ["1", "2", "3", "4", "5", "Space", "Enter", "Tab", "Esc"];
+                for key in &keys {
+                    if ui.button(*key).clicked() {
+                        self.key_input = key.to_lowercase();
+                    }
+                }
+            });
+
+            if Self::form_stacks(ui.available_width()) {
+                ui.label("Or type key:");
+                ui.add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::TextEdit::singleline(&mut self.key_input),
+                );
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("Or type key:");
+                    ui.add_sized(
+                        [ui.available_width().min(160.0), 0.0],
+                        egui::TextEdit::singleline(&mut self.key_input),
+                    );
+                });
+            }
+
+            if ui
+                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
+                .clicked()
+                && !self.key_input.is_empty()
+            {
+                self.actions.push(Action::KeyPress {
+                    key: self.key_input.to_lowercase(),
+                });
+                self.key_input.clear();
+                self.adding = AddingState::None;
+            }
+        });
+    }
+
+    fn render_delay_form(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.label("Delay:");
+
+            if Self::form_stacks(ui.available_width()) {
+                ui.label("Milliseconds:");
+                ui.add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::TextEdit::singleline(&mut self.delay_ms),
+                );
+            } else {
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        [ui.available_width().min(160.0), 0.0],
+                        egui::TextEdit::singleline(&mut self.delay_ms),
+                    );
+                    ui.label("ms");
+                });
+            }
+
+            ui.horizontal_wrapped(|ui| {
+                for (label, ms) in [
+                    ("500ms", "500"),
+                    ("1s", "1000"),
+                    ("2s", "2000"),
+                    ("5s", "5000"),
+                    ("10s", "10000"),
+                ] {
+                    if ui.button(label).clicked() {
+                        self.delay_ms = ms.to_string();
+                    }
+                }
+            });
+
+            if ui
+                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
+                .clicked()
+            {
+                if let Ok(ms) = self.delay_ms.parse::<u64>() {
+                    self.actions.push(Action::Delay { ms });
+                    self.delay_ms.clear();
+                    self.adding = AddingState::None;
+                }
+            }
+        });
+    }
+
+    fn render_action_list(&mut self, ui: &mut egui::Ui, worker_active: bool) {
+        ui.label(egui::RichText::new("Loop Order:").strong().size(16.0));
+
+        if self.actions.is_empty() {
+            ui.label("No actions added yet.");
+            return;
+        }
+
+        let mut to_remove: Option<usize> = None;
+        let mut to_move: Option<(usize, isize)> = None;
+
+        egui::ScrollArea::vertical()
+            .max_height(250.0)
+            .show(ui, |ui| {
+                for (i, action) in self.actions.iter().enumerate() {
+                    let color = Self::action_color(action);
+                    let label = egui::RichText::new(format!("{}. {}", i + 1, action))
+                        .color(color)
+                        .strong();
+
+                    ui.group(|ui| {
+                        if Self::action_row_stacks(ui.available_width()) {
+                            ui.add(egui::Label::new(label.clone()).wrap());
+
+                            if !worker_active {
+                                ui.horizontal_wrapped(|ui| {
+                                    if i > 0 && ui.small_button("^").clicked() {
+                                        to_move = Some((i, -1));
+                                    }
+                                    if i < self.actions.len() - 1 && ui.small_button("v").clicked()
+                                    {
+                                        to_move = Some((i, 1));
+                                    }
+                                    if ui.small_button("X").clicked() {
+                                        to_remove = Some(i);
+                                    }
+                                });
+                            }
+                        } else {
+                            let label_width = if worker_active {
+                                ui.available_width()
+                            } else {
+                                (ui.available_width() - ACTION_CONTROL_WIDTH).max(0.0)
+                            };
+
+                            ui.horizontal(|ui| {
+                                ui.add_sized(
+                                    [label_width, 0.0],
+                                    egui::Label::new(label.clone()).wrap(),
+                                );
+
+                                if !worker_active {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.small_button("X").clicked() {
+                                                to_remove = Some(i);
+                                            }
+                                            if i < self.actions.len() - 1
+                                                && ui.small_button("v").clicked()
+                                            {
+                                                to_move = Some((i, 1));
+                                            }
+                                            if i > 0 && ui.small_button("^").clicked() {
+                                                to_move = Some((i, -1));
+                                            }
+                                        },
+                                    );
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+
+        if let Some(idx) = to_remove {
+            self.actions.remove(idx);
+        }
+        if let Some((idx, dir)) = to_move {
+            let new_idx = (idx as isize + dir) as usize;
+            self.actions.swap(idx, new_idx);
+        }
+    }
+
+    fn render_stop_configuration(&mut self, ui: &mut egui::Ui, worker_active: bool) {
+        ui.add_enabled_ui(!worker_active, |ui| {
+            ui.label(egui::RichText::new("Stop Condition:").strong());
+            let mut is_hotkey_only = self.stop_condition == StopCondition::HotkeyOnly;
+
+            if ui
+                .radio_value(
+                    &mut is_hotkey_only,
+                    true,
+                    match self.hotkey_support() {
+                        HotkeySupport::Global => "Stop on F2 press only",
+                        HotkeySupport::FocusedOnly => "Stop on focused F2 press only",
+                    },
+                )
+                .clicked()
+            {
+                self.stop_condition = StopCondition::HotkeyOnly;
+            }
+
+            let stop_hint = self.hotkey_support().stop_hint();
+            if Self::form_stacks(ui.available_width()) {
+                if ui
+                    .radio_value(&mut is_hotkey_only, false, "Stop after")
+                    .clicked()
+                {
+                    self.apply_timer_stop();
+                }
+                let response = ui.add_enabled(
+                    !is_hotkey_only,
+                    egui::TextEdit::singleline(&mut self.stop_seconds),
+                );
+                ui.label(stop_hint);
+                if response.changed() {
+                    self.apply_timer_stop();
+                }
+            } else {
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .radio_value(&mut is_hotkey_only, false, "Stop after")
+                        .clicked()
+                    {
+                        self.apply_timer_stop();
+                    }
+                    let response = ui.add_enabled(
+                        !is_hotkey_only,
+                        egui::TextEdit::singleline(&mut self.stop_seconds).desired_width(50.0),
+                    );
+                    ui.label(stop_hint);
+                    if response.changed() {
+                        self.apply_timer_stop();
+                    }
+                });
+            }
+        });
+    }
 }
 
 impl Drop for App {
@@ -538,255 +969,23 @@ impl eframe::App for App {
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 8.0;
 
-                    // === Top Toolbar ===
-                    let button_spacing = ui.spacing().item_spacing.x;
-                    let available_width = ui.available_width().max(0.0);
-                    let button_width = ((available_width - (button_spacing * 2.0)) / 3.0).max(0.0);
-
-                    ui.horizontal(|ui| {
-                        let enabled = !worker_active;
-                        ui.add_enabled_ui(enabled, |ui| {
-                            if ui
-                                .add_sized(
-                                    [button_width, TOOLBAR_BUTTON_HEIGHT],
-                                    Self::toolbar_button("Add Mouse Click", COLOR_MOUSE),
-                                )
-                                .clicked()
-                            {
-                                self.toggle_adding(AddingState::MouseClick);
-                            }
-                            if ui
-                                .add_sized(
-                                    [button_width, TOOLBAR_BUTTON_HEIGHT],
-                                    Self::toolbar_button("Add Keyboard Press", COLOR_KEYBOARD),
-                                )
-                                .clicked()
-                            {
-                                self.toggle_adding(AddingState::KeyPress);
-                            }
-                            if ui
-                                .add_sized(
-                                    [button_width, TOOLBAR_BUTTON_HEIGHT],
-                                    Self::toolbar_button("Add Delay", COLOR_DELAY),
-                                )
-                                .clicked()
-                            {
-                                self.toggle_adding(AddingState::Delay);
-                            }
-                        });
-                    });
+                    self.render_toolbar(ui, worker_active);
 
                     // === Inline Forms ===
                     match self.adding {
-                        AddingState::MouseClick => {
-                            ui.group(|ui| {
-                                ui.label("Mouse Click:");
-                                ui.horizontal(|ui| {
-                                    ui.radio_value(
-                                        &mut self.mouse_button,
-                                        MouseButton::Left,
-                                        "Left",
-                                    );
-                                    ui.radio_value(
-                                        &mut self.mouse_button,
-                                        MouseButton::Right,
-                                        "Right",
-                                    );
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("X:");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut self.mouse_x)
-                                            .desired_width(60.0),
-                                    );
-                                    ui.label("Y:");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut self.mouse_y)
-                                            .desired_width(60.0),
-                                    );
-                                });
-                                ui.horizontal(|ui| {
-                                    if ui.button(self.mouse_capture_button_label()).clicked() {
-                                        self.begin_mouse_capture(ui.ctx());
-                                    }
-                                    ui.label(self.mouse_capture_hint());
-                                });
-                                if self.mouse_capture_support() == MouseCaptureSupport::Picker {
-                                    ui.label(
-                                        egui::RichText::new(
-                                            "Wayland: the picker opens as a transparent overlay on this window's monitor for windowed or borderless apps. Move this app onto the target monitor first.",
-                                        )
-                                        .color(COLOR_INFO),
-                                    );
-                                }
-                                if ui.button("Add").clicked() {
-                                    if let (Ok(x), Ok(y)) =
-                                        (self.mouse_x.parse::<i32>(), self.mouse_y.parse::<i32>())
-                                    {
-                                        self.actions.push(Action::MouseClick {
-                                            button: self.mouse_button.clone(),
-                                            x,
-                                            y,
-                                        });
-                                        self.adding = AddingState::None;
-                                    }
-                                }
-                            });
-                        }
-                        AddingState::KeyPress => {
-                            ui.group(|ui| {
-                                ui.label("Key Press:");
-                                ui.horizontal(|ui| {
-                                    let keys =
-                                        ["1", "2", "3", "4", "5", "Space", "Enter", "Tab", "Esc"];
-                                    for key in &keys {
-                                        if ui.button(*key).clicked() {
-                                            self.key_input = key.to_lowercase();
-                                        }
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Or type key:");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut self.key_input)
-                                            .desired_width(80.0),
-                                    );
-                                });
-                                if ui.button("Add").clicked() && !self.key_input.is_empty() {
-                                    self.actions.push(Action::KeyPress {
-                                        key: self.key_input.to_lowercase(),
-                                    });
-                                    self.key_input.clear();
-                                    self.adding = AddingState::None;
-                                }
-                            });
-                        }
-                        AddingState::Delay => {
-                            ui.group(|ui| {
-                                ui.label("Delay:");
-                                ui.horizontal(|ui| {
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut self.delay_ms)
-                                            .desired_width(80.0),
-                                    );
-                                    ui.label("ms");
-                                });
-                                ui.horizontal(|ui| {
-                                    for (label, ms) in [
-                                        ("500ms", "500"),
-                                        ("1s", "1000"),
-                                        ("2s", "2000"),
-                                        ("5s", "5000"),
-                                        ("10s", "10000"),
-                                    ] {
-                                        if ui.button(label).clicked() {
-                                            self.delay_ms = ms.to_string();
-                                        }
-                                    }
-                                });
-                                if ui.button("Add").clicked() {
-                                    if let Ok(ms) = self.delay_ms.parse::<u64>() {
-                                        self.actions.push(Action::Delay { ms });
-                                        self.delay_ms.clear();
-                                        self.adding = AddingState::None;
-                                    }
-                                }
-                            });
-                        }
+                        AddingState::MouseClick => self.render_mouse_click_form(ui),
+                        AddingState::KeyPress => self.render_key_press_form(ui),
+                        AddingState::Delay => self.render_delay_form(ui),
                         AddingState::None => {}
                     }
 
                     ui.separator();
 
-                    // === Action List ===
-                    ui.label(egui::RichText::new("Loop Order:").strong().size(16.0));
-
-                    if self.actions.is_empty() {
-                        ui.label("No actions added yet.");
-                    } else {
-                        let mut to_remove: Option<usize> = None;
-                        let mut to_move: Option<(usize, isize)> = None;
-
-                        egui::ScrollArea::vertical()
-                            .max_height(250.0)
-                            .show(ui, |ui| {
-                                for (i, action) in self.actions.iter().enumerate() {
-                                    ui.horizontal(|ui| {
-                                        let color = Self::action_color(action);
-                                        ui.label(
-                                            egui::RichText::new(format!("{}. {}", i + 1, action))
-                                                .color(color)
-                                                .strong(),
-                                        );
-
-                                        if !worker_active {
-                                            ui.with_layout(
-                                                egui::Layout::right_to_left(egui::Align::Center),
-                                                |ui| {
-                                                    if ui.small_button("X").clicked() {
-                                                        to_remove = Some(i);
-                                                    }
-                                                    if i < self.actions.len() - 1
-                                                        && ui.small_button("v").clicked()
-                                                    {
-                                                        to_move = Some((i, 1));
-                                                    }
-                                                    if i > 0 && ui.small_button("^").clicked() {
-                                                        to_move = Some((i, -1));
-                                                    }
-                                                },
-                                            );
-                                        }
-                                    });
-                                }
-                            });
-
-                        if let Some(idx) = to_remove {
-                            self.actions.remove(idx);
-                        }
-                        if let Some((idx, dir)) = to_move {
-                            let new_idx = (idx as isize + dir) as usize;
-                            self.actions.swap(idx, new_idx);
-                        }
-                    }
+                    self.render_action_list(ui, worker_active);
 
                     ui.separator();
 
-                    // === Stop Configuration ===
-                    ui.add_enabled_ui(!worker_active, |ui| {
-                        ui.label(egui::RichText::new("Stop Condition:").strong());
-                        let mut is_hotkey_only = self.stop_condition == StopCondition::HotkeyOnly;
-                        if ui
-                            .radio_value(
-                                &mut is_hotkey_only,
-                                true,
-                                match self.hotkey_support() {
-                                    HotkeySupport::Global => "Stop on F2 press only",
-                                    HotkeySupport::FocusedOnly => "Stop on focused F2 press only",
-                                },
-                            )
-                            .clicked()
-                        {
-                            self.stop_condition = StopCondition::HotkeyOnly;
-                        }
-                        ui.horizontal(|ui| {
-                            if ui
-                                .radio_value(&mut is_hotkey_only, false, "Stop after")
-                                .clicked()
-                            {
-                                self.apply_timer_stop();
-                            }
-                            let response = ui.add_enabled(
-                                !is_hotkey_only,
-                                egui::TextEdit::singleline(&mut self.stop_seconds)
-                                    .desired_width(50.0),
-                            );
-                            ui.label(self.hotkey_support().stop_hint());
-                            if response.changed() {
-                                self.apply_timer_stop();
-                            }
-                        });
-                    });
+                    self.render_stop_configuration(ui, worker_active);
 
                     if let Some(notice) = self.platform_notice() {
                         ui.separator();
@@ -816,5 +1015,64 @@ impl eframe::App for App {
                     });
                 });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opening_mouse_click_form_clears_saved_coordinates() {
+        let mut app = App::new_for_tests();
+        app.mouse_x = String::from("120");
+        app.mouse_y = String::from("340");
+
+        app.toggle_adding(AddingState::MouseClick);
+
+        assert_eq!(app.adding, AddingState::MouseClick);
+        assert!(app.mouse_x.is_empty());
+        assert!(app.mouse_y.is_empty());
+    }
+
+    #[test]
+    fn adding_mouse_click_clears_coordinates_and_closes_form() {
+        let mut app = App::new_for_tests();
+        app.mouse_button = MouseButton::Right;
+        app.open_mouse_click_form();
+        app.mouse_x = String::from("45");
+        app.mouse_y = String::from("90");
+
+        assert!(app.try_add_mouse_click());
+        assert_eq!(app.adding, AddingState::None);
+        assert!(app.mouse_x.is_empty());
+        assert!(app.mouse_y.is_empty());
+        assert_eq!(app.actions.len(), 1);
+
+        match &app.actions[0] {
+            Action::MouseClick { button, x, y } => {
+                assert_eq!(*button, MouseButton::Right);
+                assert_eq!(*x, 45);
+                assert_eq!(*y, 90);
+            }
+            action => panic!("expected mouse click action, got {action:?}"),
+        }
+    }
+
+    #[test]
+    fn non_mouse_forms_do_not_reset_coordinates() {
+        let mut app = App::new_for_tests();
+        app.mouse_x = String::from("12");
+        app.mouse_y = String::from("34");
+
+        app.toggle_adding(AddingState::KeyPress);
+        assert_eq!(app.adding, AddingState::KeyPress);
+        assert_eq!(app.mouse_x, "12");
+        assert_eq!(app.mouse_y, "34");
+
+        app.toggle_adding(AddingState::Delay);
+        assert_eq!(app.adding, AddingState::Delay);
+        assert_eq!(app.mouse_x, "12");
+        assert_eq!(app.mouse_y, "34");
     }
 }
