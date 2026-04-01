@@ -148,25 +148,27 @@ impl LinuxInputSession {
 
 #[cfg(target_os = "linux")]
 fn wayland_backend_attempt(wayland_display: Option<&str>) -> InputBackendAttempt {
-    let mut settings = enigo::Settings::default();
     // Avoid double-injecting events through XWayland when a native Wayland
     // backend is available for this session.
-    settings.x11_display = Some(String::from(DISABLE_X11_DISPLAY));
-    settings.wayland_display = wayland_display.map(str::to_owned);
     InputBackendAttempt {
         backend: InputBackend::Wayland,
-        settings,
+        settings: enigo::Settings {
+            x11_display: Some(String::from(DISABLE_X11_DISPLAY)),
+            wayland_display: wayland_display.map(str::to_owned),
+            ..Default::default()
+        },
     }
 }
 
 #[cfg(target_os = "linux")]
 fn x11_backend_attempt(x11_display: Option<&str>) -> InputBackendAttempt {
-    let mut settings = enigo::Settings::default();
-    settings.x11_display = x11_display.map(str::to_owned);
-    settings.wayland_display = Some(String::from(DISABLE_WAYLAND_DISPLAY));
     InputBackendAttempt {
         backend: InputBackend::X11,
-        settings,
+        settings: enigo::Settings {
+            x11_display: x11_display.map(str::to_owned),
+            wayland_display: Some(String::from(DISABLE_WAYLAND_DISPLAY)),
+            ..Default::default()
+        },
     }
 }
 
@@ -186,7 +188,7 @@ fn linux_input_backend_attempts(session: &LinuxInputSession) -> Vec<InputBackend
 fn input_backend_attempts() -> Vec<InputBackendAttempt> {
     #[cfg(target_os = "linux")]
     {
-        return linux_input_backend_attempts(&LinuxInputSession::detect());
+        linux_input_backend_attempts(&LinuxInputSession::detect())
     }
 
     #[cfg(not(target_os = "linux"))]

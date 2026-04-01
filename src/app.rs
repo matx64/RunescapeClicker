@@ -16,6 +16,7 @@ const COLOR_START: egui::Color32 = egui::Color32::from_rgb(0, 133, 72);
 const COLOR_STOP: egui::Color32 = egui::Color32::from_rgb(210, 62, 62);
 const COLOR_INFO: egui::Color32 = egui::Color32::from_rgb(176, 111, 0);
 const COLOR_STATUS: egui::Color32 = egui::Color32::from_rgb(249, 86, 79);
+const CRASH_MESSAGE: &str = "Automation thread crashed.";
 const TOOLBAR_BUTTON_HEIGHT: f32 = 46.0;
 const START_BUTTON_SIZE: egui::Vec2 = egui::vec2(140.0, 48.0);
 const TOOLBAR_STACK_BREAKPOINT: f32 = 440.0;
@@ -160,7 +161,7 @@ impl App {
 
     fn finish_mouse_click_add(&mut self, x: i32, y: i32) {
         self.actions.push(Action::MouseClick {
-            button: self.mouse_button.clone(),
+            button: self.mouse_button,
             x,
             y,
         });
@@ -249,7 +250,7 @@ impl App {
         {
             if let Some(handle) = self.worker_handle.take() {
                 if handle.join().is_err() {
-                    self.status_message = Some(String::from("Automation thread crashed."));
+                    self.status_message = Some(String::from(CRASH_MESSAGE));
                 }
             }
 
@@ -279,23 +280,20 @@ impl App {
     fn join_worker(&mut self) {
         if let Some(handle) = self.worker_handle.take() {
             if handle.join().is_err() {
-                self.status_message = Some(String::from("Automation thread crashed."));
+                self.status_message = Some(String::from(CRASH_MESSAGE));
             }
         }
 
         self.running.store(false, Ordering::Release);
     }
 
-    fn hotkey_support(&self) -> HotkeySupport {
-        self.hotkey_support
-    }
-
-    fn mouse_capture_support(&self) -> MouseCaptureSupport {
-        self.mouse_capture_support
+    fn apply_captured_position(&mut self) {
+        self.mouse_x = self.captured_position.0.load(Ordering::Relaxed).to_string();
+        self.mouse_y = self.captured_position.1.load(Ordering::Relaxed).to_string();
     }
 
     fn mouse_capture_hint(&self) -> &'static str {
-        match (self.mouse_capture_support(), self.hotkey_support()) {
+        match (self.mouse_capture_support, self.hotkey_support) {
             (MouseCaptureSupport::Direct, HotkeySupport::Global) => {
                 "Press F1 or click Capture"
             }
@@ -312,22 +310,22 @@ impl App {
     }
 
     fn mouse_capture_button_label(&self) -> &'static str {
-        match self.mouse_capture_support() {
+        match self.mouse_capture_support {
             MouseCaptureSupport::Direct => "Capture",
             MouseCaptureSupport::Picker => "Pick On Screen",
         }
     }
 
     fn platform_notice(&self) -> Option<&'static str> {
-        match (self.hotkey_support(), self.mouse_capture_support()) {
+        match (self.hotkey_support, self.mouse_capture_support) {
             (HotkeySupport::FocusedOnly, MouseCaptureSupport::Picker) => Some(
                 "Wayland detected: F2 stop works only while this window is focused, and mouse capture uses a transparent overlay on this window's monitor for windowed or borderless apps.",
             ),
             (HotkeySupport::FocusedOnly, MouseCaptureSupport::Direct) => {
-                self.hotkey_support().notice()
+                self.hotkey_support.notice()
             }
             (HotkeySupport::Global, MouseCaptureSupport::Picker) => {
-                self.mouse_capture_support().notice()
+                self.mouse_capture_support.notice()
             }
             (HotkeySupport::Global, MouseCaptureSupport::Direct) => None,
         }
@@ -402,8 +400,7 @@ impl App {
     fn capture_mouse_position(&mut self) {
         match capture_mouse_position(&self.captured_position, &self.position_captured) {
             Ok(()) => {
-                self.mouse_x = self.captured_position.0.load(Ordering::Relaxed).to_string();
-                self.mouse_y = self.captured_position.1.load(Ordering::Relaxed).to_string();
+                self.apply_captured_position();
                 self.position_captured.store(false, Ordering::Release);
                 self.status_message = Some(String::from("Mouse position captured."));
             }
@@ -414,7 +411,7 @@ impl App {
     }
 
     fn begin_mouse_capture(&mut self, ctx: &egui::Context) {
-        match self.mouse_capture_support() {
+        match self.mouse_capture_support {
             MouseCaptureSupport::Direct => self.capture_mouse_position(),
             MouseCaptureSupport::Picker => self.start_mouse_capture_picker(ctx),
         }
@@ -528,7 +525,7 @@ impl App {
             return;
         }
 
-        if self.hotkey_support() != HotkeySupport::FocusedOnly {
+        if self.hotkey_support != HotkeySupport::FocusedOnly {
             return;
         }
 
@@ -668,7 +665,7 @@ impl App {
                 });
             }
 
-            if self.mouse_capture_support() == MouseCaptureSupport::Picker {
+            if self.mouse_capture_support == MouseCaptureSupport::Picker {
                 ui.label(
                     egui::RichText::new(
                         "Wayland: the picker opens as a transparent overlay on this window's monitor for windowed or borderless apps. Move this app onto the target monitor first.",
@@ -868,7 +865,7 @@ impl App {
                 .radio_value(
                     &mut is_hotkey_only,
                     true,
-                    match self.hotkey_support() {
+                    match self.hotkey_support {
                         HotkeySupport::Global => "Stop on F2 press only",
                         HotkeySupport::FocusedOnly => "Stop on focused F2 press only",
                     },
@@ -878,7 +875,7 @@ impl App {
                 self.stop_condition = StopCondition::HotkeyOnly;
             }
 
-            let stop_hint = self.hotkey_support().stop_hint();
+            let stop_hint = self.hotkey_support.stop_hint();
             if Self::form_stacks(ui.available_width()) {
                 if ui
                     .radio_value(&mut is_hotkey_only, false, "Stop after")
@@ -946,8 +943,7 @@ impl eframe::App for App {
 
         // Check if F1 captured a position
         if self.position_captured.load(Ordering::Acquire) {
-            self.mouse_x = self.captured_position.0.load(Ordering::Relaxed).to_string();
-            self.mouse_y = self.captured_position.1.load(Ordering::Relaxed).to_string();
+            self.apply_captured_position();
             self.position_captured.store(false, Ordering::Release);
         }
 
