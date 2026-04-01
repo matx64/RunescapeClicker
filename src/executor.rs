@@ -1,5 +1,6 @@
 use crate::action::{Action, MouseButton, StopCondition};
-use enigo::{Button, Direction, Enigo, Key, Keyboard, Mouse, Settings};
+use crate::hotkey::input_backend_settings;
+use enigo::{Button, Direction, Enigo, Key, Keyboard, Mouse};
 use rand::Rng;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -73,7 +74,7 @@ pub fn run_sequence(
     status_tx: Sender<String>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let mut enigo = match Enigo::new(&Settings::default()) {
+        let mut enigo = match Enigo::new(&input_backend_settings()) {
             Ok(enigo) => enigo,
             Err(err) => {
                 report_fatal_error(

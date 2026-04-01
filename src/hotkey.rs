@@ -14,8 +14,8 @@ pub enum HotkeySupport {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MouseCaptureSupport {
-    Available,
-    UnsupportedOnWayland,
+    Direct,
+    Picker,
 }
 
 fn is_wayland_session() -> bool {
@@ -23,6 +23,24 @@ fn is_wayland_session() -> bool {
         .ok()
         .map(|value| value.to_ascii_lowercase());
     env::var_os("WAYLAND_DISPLAY").is_some() || matches!(session_type.as_deref(), Some("wayland"))
+}
+
+pub fn input_backend_settings() -> enigo::Settings {
+    let mut settings = enigo::Settings::default();
+
+    #[cfg(target_os = "linux")]
+    {
+        if is_wayland_session() {
+            // Avoid double-injecting events through XWayland when a native Wayland
+            // backend is available for this session.
+            settings.x11_display = Some(String::from("__rs_clicker_disable_x11__"));
+            settings.wayland_display = env::var("WAYLAND_DISPLAY").ok();
+        } else {
+            settings.wayland_display = Some(String::from("__rs_clicker_disable_wayland__"));
+        }
+    }
+
+    settings
 }
 
 impl HotkeySupport {
@@ -59,19 +77,19 @@ impl MouseCaptureSupport {
         #[cfg(target_os = "linux")]
         {
             if is_wayland_session() {
-                return Self::UnsupportedOnWayland;
+                return Self::Picker;
             }
         }
 
-        Self::Available
+        Self::Direct
     }
 
-    pub fn unsupported_message(self) -> Option<&'static str> {
+    pub fn notice(self) -> Option<&'static str> {
         match self {
-            Self::Available => None,
-            Self::UnsupportedOnWayland => Some(
-                "Mouse position capture is unavailable on Wayland in this build. Enter X/Y manually or run under X11.",
-            ),
+            Self::Direct => None,
+            Self::Picker => {
+                Some("Wayland detected: mouse-position capture uses a fullscreen picker.")
+            }
         }
     }
 }
@@ -157,7 +175,7 @@ pub fn capture_mouse_position(
     captured_position: &Arc<(AtomicI32, AtomicI32)>,
     position_captured: &Arc<AtomicBool>,
 ) -> Result<(), String> {
-    match enigo::Enigo::new(&enigo::Settings::default()) {
+    match enigo::Enigo::new(&input_backend_settings()) {
         Ok(enigo) => {
             use enigo::Mouse;
             match enigo.location() {
@@ -202,17 +220,15 @@ mod tests {
     }
 
     #[test]
-    fn wayland_capture_support_uses_manual_entry_copy() {
+    fn wayland_capture_support_uses_picker_copy() {
         assert_eq!(
-            MouseCaptureSupport::UnsupportedOnWayland.unsupported_message(),
-            Some(
-                "Mouse position capture is unavailable on Wayland in this build. Enter X/Y manually or run under X11.",
-            )
+            MouseCaptureSupport::Picker.notice(),
+            Some("Wayland detected: mouse-position capture uses a fullscreen picker.",)
         );
     }
 
     #[test]
     fn available_capture_support_has_no_warning() {
-        assert_eq!(MouseCaptureSupport::Available.unsupported_message(), None);
+        assert_eq!(MouseCaptureSupport::Direct.notice(), None);
     }
 }

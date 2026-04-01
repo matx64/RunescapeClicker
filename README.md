@@ -22,7 +22,6 @@ A cross-platform Runescape Clicker with graphical interface built in Rust.
 ### Prerequisites
 
 - [Rust toolchain](https://rustup.rs/)
-- Linux: `libxdo-dev` (`sudo apt install libxdo-dev`)
 
 ### Build & Run
 
@@ -40,5 +39,10 @@ cargo run --release
 ## Linux Hotkeys
 
 - X11 sessions: global `F1` capture and global `F2` stop are supported.
-- Wayland sessions: `F2` stop only works while the app window is focused.
-- Wayland sessions: mouse-position capture is unavailable in this build, so `X/Y` must be entered manually or captured from an X11 session.
+- Wayland sessions: `F2` stop works while the app window is focused.
+- Wayland sessions: `F1` or `Pick On Screen` opens a fullscreen picker so you can click the target point to capture `X/Y`.
+
+## Wayland Notes
+
+- This build enables `enigo`'s experimental Wayland backend.
+- Mouse/keyboard injection still depends on compositor support for the relevant virtual-input protocol.
