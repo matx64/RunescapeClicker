@@ -1,7 +1,4 @@
-mod action;
-mod app;
-mod executor;
-mod hotkey;
+use runescape_clicker::app::App;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -15,6 +12,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Runescape Clicker",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
 }

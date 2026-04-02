@@ -179,9 +179,52 @@ impl App {
         }
     }
 
+    fn try_add_key_press(&mut self) -> bool {
+        if self.key_input.is_empty() {
+            return false;
+        }
+
+        self.actions.push(Action::KeyPress {
+            key: self.key_input.to_lowercase(),
+        });
+        self.key_input.clear();
+        self.adding = AddingState::None;
+        true
+    }
+
+    fn try_add_delay(&mut self) -> bool {
+        if let Ok(ms) = self.delay_ms.parse::<u64>() {
+            self.actions.push(Action::Delay { ms });
+            self.delay_ms.clear();
+            self.adding = AddingState::None;
+            true
+        } else {
+            false
+        }
+    }
+
     fn apply_timer_stop(&mut self) {
         if let Ok(s) = self.stop_seconds.parse::<u64>() {
             self.stop_condition = StopCondition::Timer { seconds: s };
+        }
+    }
+
+    fn remove_action(&mut self, idx: usize) -> bool {
+        if idx < self.actions.len() {
+            self.actions.remove(idx);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn move_action(&mut self, idx: usize, dir: isize) -> bool {
+        let new_idx = idx as isize + dir;
+        if idx < self.actions.len() && (0..self.actions.len() as isize).contains(&new_idx) {
+            self.actions.swap(idx, new_idx as usize);
+            true
+        } else {
+            false
         }
     }
 
@@ -714,13 +757,8 @@ impl App {
             if ui
                 .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
                 .clicked()
-                && !self.key_input.is_empty()
             {
-                self.actions.push(Action::KeyPress {
-                    key: self.key_input.to_lowercase(),
-                });
-                self.key_input.clear();
-                self.adding = AddingState::None;
+                self.try_add_key_press();
             }
         });
     }
@@ -763,11 +801,7 @@ impl App {
                 .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
                 .clicked()
             {
-                if let Ok(ms) = self.delay_ms.parse::<u64>() {
-                    self.actions.push(Action::Delay { ms });
-                    self.delay_ms.clear();
-                    self.adding = AddingState::None;
-                }
+                self.try_add_delay();
             }
         });
     }
@@ -848,11 +882,10 @@ impl App {
             });
 
         if let Some(idx) = to_remove {
-            self.actions.remove(idx);
+            self.remove_action(idx);
         }
         if let Some((idx, dir)) = to_move {
-            let new_idx = (idx as isize + dir) as usize;
-            self.actions.swap(idx, new_idx);
+            self.move_action(idx, dir);
         }
     }
 
@@ -1017,6 +1050,7 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
 
     #[test]
     fn opening_mouse_click_form_clears_saved_coordinates() {
@@ -1070,5 +1104,157 @@ mod tests {
         assert_eq!(app.adding, AddingState::Delay);
         assert_eq!(app.mouse_x, "12");
         assert_eq!(app.mouse_y, "34");
+    }
+
+    #[test]
+    fn invalid_mouse_click_coordinates_leave_form_open() {
+        let mut app = App::new_for_tests();
+        app.open_mouse_click_form();
+        app.mouse_x = String::from("12");
+        app.mouse_y = String::from("abc");
+
+        assert!(!app.try_add_mouse_click());
+        assert_eq!(app.adding, AddingState::MouseClick);
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn adding_key_press_normalizes_input_and_closes_form() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::KeyPress;
+        app.key_input = String::from("EsC");
+
+        assert!(app.try_add_key_press());
+        assert_eq!(app.adding, AddingState::None);
+        assert!(app.key_input.is_empty());
+        assert_eq!(app.actions.len(), 1);
+        assert_eq!(
+            app.actions[0],
+            Action::KeyPress {
+                key: String::from("esc"),
+            }
+        );
+    }
+
+    #[test]
+    fn empty_key_press_is_rejected() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::KeyPress;
+
+        assert!(!app.try_add_key_press());
+        assert_eq!(app.adding, AddingState::KeyPress);
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn adding_delay_clears_input_and_closes_form() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::Delay;
+        app.delay_ms = String::from("1500");
+
+        assert!(app.try_add_delay());
+        assert_eq!(app.adding, AddingState::None);
+        assert!(app.delay_ms.is_empty());
+        assert_eq!(app.actions.len(), 1);
+        assert_eq!(app.actions[0], Action::Delay { ms: 1500 });
+    }
+
+    #[test]
+    fn invalid_delay_is_rejected() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::Delay;
+        app.delay_ms = String::from("1.5");
+
+        assert!(!app.try_add_delay());
+        assert_eq!(app.adding, AddingState::Delay);
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn invalid_timer_input_leaves_stop_condition_unchanged() {
+        let mut app = App::new_for_tests();
+        app.stop_condition = StopCondition::Timer { seconds: 25 };
+        app.stop_seconds = String::from("two minutes");
+
+        app.apply_timer_stop();
+
+        assert_eq!(app.stop_condition, StopCondition::Timer { seconds: 25 });
+    }
+
+    #[test]
+    fn remove_action_ignores_invalid_index() {
+        let mut app = App::new_for_tests();
+        app.actions.push(Action::Delay { ms: 100 });
+
+        assert!(!app.remove_action(3));
+        assert_eq!(app.actions.len(), 1);
+    }
+
+    #[test]
+    fn move_action_swaps_items_and_rejects_out_of_bounds_moves() {
+        let mut app = App::new_for_tests();
+        app.actions = vec![
+            Action::Delay { ms: 100 },
+            Action::KeyPress {
+                key: String::from("space"),
+            },
+            Action::Delay { ms: 200 },
+        ];
+
+        assert!(app.move_action(1, -1));
+        assert_eq!(
+            app.actions[0],
+            Action::KeyPress {
+                key: String::from("space"),
+            }
+        );
+        assert!(!app.move_action(0, -1));
+        assert!(!app.move_action(2, 1));
+    }
+
+    #[test]
+    fn poll_status_messages_keeps_latest_message() {
+        let mut app = App::new_for_tests();
+        app.status_tx.send(String::from("first")).unwrap();
+        app.status_tx.send(String::from("second")).unwrap();
+
+        app.poll_status_messages();
+
+        assert_eq!(app.status_message.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn reap_worker_reports_crash_and_clears_running_flag() {
+        let handle = thread::spawn(|| panic!("boom"));
+        while !handle.is_finished() {
+            thread::yield_now();
+        }
+
+        let mut app = App::new_for_tests();
+        app.running.store(true, Ordering::Release);
+        app.worker_handle = Some(handle);
+
+        app.reap_worker();
+
+        assert_eq!(app.status_message.as_deref(), Some(CRASH_MESSAGE));
+        assert!(!app.running.load(Ordering::Acquire));
+        assert!(!app.worker_active());
+    }
+
+    #[test]
+    fn platform_copy_changes_with_support_modes() {
+        let mut app = App::new_for_tests();
+
+        app.hotkey_support = HotkeySupport::Global;
+        app.mouse_capture_support = MouseCaptureSupport::Direct;
+        assert_eq!(app.mouse_capture_button_label(), "Capture");
+        assert_eq!(app.mouse_capture_hint(), "Press F1 or click Capture");
+        assert_eq!(app.platform_notice(), None);
+
+        app.hotkey_support = HotkeySupport::FocusedOnly;
+        app.mouse_capture_support = MouseCaptureSupport::Picker;
+        assert_eq!(app.mouse_capture_button_label(), "Pick On Screen");
+        assert!(app.mouse_capture_hint().contains("Pick On Screen"));
+        assert!(app.platform_notice().unwrap().contains("Wayland detected"));
     }
 }

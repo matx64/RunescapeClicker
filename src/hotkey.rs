@@ -99,16 +99,37 @@ impl Display for InputBackendConnectError {
     }
 }
 
-fn session_env_var(name: &str) -> Option<String> {
-    env::var(name).ok().filter(|value| !value.is_empty())
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct SessionEnvironment {
+    session_type: Option<String>,
+    wayland_display: Option<String>,
+    x11_display: Option<String>,
+}
+
+impl SessionEnvironment {
+    fn read() -> Self {
+        Self {
+            session_type: normalized_env_value(env::var("XDG_SESSION_TYPE").ok()),
+            wayland_display: normalized_env_value(env::var("WAYLAND_DISPLAY").ok()),
+            x11_display: normalized_env_value(env::var("DISPLAY").ok()),
+        }
+    }
+}
+
+fn normalized_env_value(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.is_empty())
+}
+
+fn is_wayland_session_from_env(env: &SessionEnvironment) -> bool {
+    env.wayland_display.is_some()
+        || matches!(
+            env.session_type.as_deref().map(str::to_ascii_lowercase).as_deref(),
+            Some("wayland")
+        )
 }
 
 fn is_wayland_session() -> bool {
-    let session_type = env::var("XDG_SESSION_TYPE")
-        .ok()
-        .map(|value| value.to_ascii_lowercase());
-    session_env_var("WAYLAND_DISPLAY").is_some()
-        || matches!(session_type.as_deref(), Some("wayland"))
+    is_wayland_session_from_env(&SessionEnvironment::read())
 }
 
 fn format_backend_sequence(backends: &[InputBackend]) -> String {
@@ -138,10 +159,14 @@ struct LinuxInputSession {
 #[cfg(target_os = "linux")]
 impl LinuxInputSession {
     fn detect() -> Self {
+        Self::from_env(&SessionEnvironment::read())
+    }
+
+    fn from_env(env: &SessionEnvironment) -> Self {
         Self {
-            is_wayland: is_wayland_session(),
-            wayland_display: session_env_var("WAYLAND_DISPLAY"),
-            x11_display: session_env_var("DISPLAY"),
+            is_wayland: is_wayland_session_from_env(env),
+            wayland_display: env.wayland_display.clone(),
+            x11_display: env.x11_display.clone(),
         }
     }
 }
@@ -374,6 +399,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn normalized_env_value_ignores_empty_strings() {
+        assert_eq!(normalized_env_value(Some(String::new())), None);
+        assert_eq!(
+            normalized_env_value(Some(String::from("wayland-0"))),
+            Some(String::from("wayland-0"))
+        );
+    }
+
+    #[test]
+    fn wayland_detection_uses_display_or_session_type() {
+        assert!(is_wayland_session_from_env(&SessionEnvironment {
+            wayland_display: Some(String::from("wayland-0")),
+            ..Default::default()
+        }));
+
+        assert!(is_wayland_session_from_env(&SessionEnvironment {
+            session_type: Some(String::from("WAYLAND")),
+            ..Default::default()
+        }));
+
+        assert!(!is_wayland_session_from_env(&SessionEnvironment {
+            session_type: Some(String::from("x11")),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
     fn global_hotkeys_are_default_off_linux() {
         #[cfg(not(target_os = "linux"))]
         assert_eq!(HotkeySupport::detect(), HotkeySupport::Global);
@@ -492,5 +544,51 @@ mod tests {
         assert!(rendered.contains("wayland: no connection could be established"));
         assert!(rendered.contains("x11: failed to establish the connection"));
         assert!(rendered.contains("Wayland input injection depends on compositor support"));
+    }
+
+    #[test]
+    fn input_backend_error_without_wayland_omits_wayland_hint() {
+        let error = InputBackendConnectError {
+            failures: vec![InputBackendFailure {
+                backend: InputBackend::X11,
+                reason: String::from("display missing"),
+            }],
+        };
+
+        let rendered = error.to_string();
+        assert!(rendered.contains("tried x11"));
+        assert!(!rendered.contains("Wayland input injection depends on compositor support"));
+    }
+
+    #[test]
+    fn backend_sequence_formats_zero_one_and_many_backends() {
+        assert_eq!(format_backend_sequence(&[]), "no backends");
+        assert_eq!(format_backend_sequence(&[InputBackend::X11]), "x11");
+        assert_eq!(
+            format_backend_sequence(&[InputBackend::Wayland, InputBackend::X11]),
+            "wayland, then x11"
+        );
+        assert_eq!(
+            format_backend_sequence(&[
+                InputBackend::Wayland,
+                InputBackend::X11,
+                InputBackend::Wayland,
+            ]),
+            "wayland, x11, then wayland"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_input_session_copies_values_from_environment() {
+        let session = LinuxInputSession::from_env(&SessionEnvironment {
+            session_type: Some(String::from("wayland")),
+            wayland_display: Some(String::from("wayland-0")),
+            x11_display: Some(String::from(":1")),
+        });
+
+        assert!(session.is_wayland);
+        assert_eq!(session.wayland_display.as_deref(), Some("wayland-0"));
+        assert_eq!(session.x11_display.as_deref(), Some(":1"));
     }
 }

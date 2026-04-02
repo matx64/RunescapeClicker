@@ -15,7 +15,7 @@ impl fmt::Display for MouseButton {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     MouseClick { button: MouseButton, x: i32, y: i32 },
     KeyPress { key: String },
@@ -44,4 +44,46 @@ impl fmt::Display for Action {
 pub enum StopCondition {
     HotkeyOnly,
     Timer { seconds: u64 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mouse_button_display_labels_are_human_readable() {
+        assert_eq!(MouseButton::Left.to_string(), "Left");
+        assert_eq!(MouseButton::Right.to_string(), "Right");
+    }
+
+    #[test]
+    fn mouse_click_action_display_includes_button_and_coordinates() {
+        assert_eq!(
+            Action::MouseClick {
+                button: MouseButton::Right,
+                x: 120,
+                y: 240,
+            }
+            .to_string(),
+            "Right Click on (120, 240)"
+        );
+    }
+
+    #[test]
+    fn key_press_action_display_includes_key_name() {
+        assert_eq!(
+            Action::KeyPress {
+                key: String::from("space"),
+            }
+            .to_string(),
+            "Press space"
+        );
+    }
+
+    #[test]
+    fn delay_action_display_formats_milliseconds_and_seconds() {
+        assert_eq!(Action::Delay { ms: 250 }.to_string(), "250ms Delay");
+        assert_eq!(Action::Delay { ms: 2000 }.to_string(), "2s Delay");
+        assert_eq!(Action::Delay { ms: 2500 }.to_string(), "2500ms Delay");
+    }
 }
