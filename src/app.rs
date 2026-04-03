@@ -57,8 +57,7 @@ pub struct App {
 
     // Mouse click form
     mouse_button: MouseButton,
-    mouse_x: String,
-    mouse_y: String,
+    selected_mouse_position: Option<(i32, i32)>,
 
     // Keyboard press form
     key_input: String,
@@ -121,8 +120,7 @@ impl App {
             worker_handle: None,
             adding: AddingState::None,
             mouse_button: MouseButton::Left,
-            mouse_x: String::new(),
-            mouse_y: String::new(),
+            selected_mouse_position: None,
             key_input: String::new(),
             delay_ms: String::new(),
             stop_seconds: String::from("120"),
@@ -152,17 +150,14 @@ impl App {
         if self.adding == state {
             self.adding = AddingState::None;
         } else {
-            match state {
-                AddingState::MouseClick => self.open_mouse_click_form(),
-                _ => self.adding = state,
-            }
+            self.adding = state;
         }
     }
 
-    fn open_mouse_click_form(&mut self) {
-        self.mouse_x.clear();
-        self.mouse_y.clear();
+    fn start_mouse_click_flow(&mut self, ctx: &egui::Context) {
+        self.selected_mouse_position = None;
         self.adding = AddingState::MouseClick;
+        self.start_mouse_capture_picker(ctx);
     }
 
     fn finish_mouse_click_add(&mut self, x: i32, y: i32) {
@@ -171,13 +166,12 @@ impl App {
             x,
             y,
         });
-        self.mouse_x.clear();
-        self.mouse_y.clear();
+        self.selected_mouse_position = None;
         self.adding = AddingState::None;
     }
 
     fn try_add_mouse_click(&mut self) -> bool {
-        if let (Ok(x), Ok(y)) = (self.mouse_x.parse::<i32>(), self.mouse_y.parse::<i32>()) {
+        if let Some((x, y)) = self.selected_mouse_position {
             self.finish_mouse_click_add(x, y);
             true
         } else {
@@ -326,6 +320,33 @@ impl App {
         self.running.store(false, Ordering::Release);
     }
 
+    fn apply_captured_position(&mut self) {
+        self.selected_mouse_position = Some((
+            self.captured_position.0.load(Ordering::Relaxed),
+            self.captured_position.1.load(Ordering::Relaxed),
+        ));
+    }
+
+    fn can_capture_mouse_position_direct(&self) -> bool {
+        self.adding == AddingState::MouseClick
+            && self.mouse_capture_picker.is_none()
+            && self.mouse_capture_support == MouseCaptureSupport::Direct
+    }
+
+    fn mouse_capture_hint(&self) -> &'static str {
+        match (self.mouse_capture_support, self.hotkey_support) {
+            (MouseCaptureSupport::Direct, HotkeySupport::Global) => {
+                "Picker opens first. Press F1 to capture the current mouse position directly instead."
+            }
+            (MouseCaptureSupport::Direct, HotkeySupport::FocusedOnly) => {
+                "Picker opens first. Focus this window and press F1 to capture the current mouse position directly instead."
+            }
+            (MouseCaptureSupport::Picker, _) => {
+                "Picker opens first. On this platform, mouse capture is available only through the transparent overlay."
+            }
+        }
+    }
+
     fn join_worker(&mut self) {
         if let Some(handle) = self.worker_handle.take() {
             if handle.join().is_err() {
@@ -334,32 +355,6 @@ impl App {
         }
 
         self.running.store(false, Ordering::Release);
-    }
-
-    fn apply_captured_position(&mut self) {
-        self.mouse_x = self.captured_position.0.load(Ordering::Relaxed).to_string();
-        self.mouse_y = self.captured_position.1.load(Ordering::Relaxed).to_string();
-    }
-
-    fn mouse_capture_hint(&self) -> &'static str {
-        match (self.mouse_capture_support, self.hotkey_support) {
-            (MouseCaptureSupport::Direct, HotkeySupport::Global) => {
-                "Press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
-            }
-            (MouseCaptureSupport::Direct, HotkeySupport::FocusedOnly) => {
-                "Focus this window and press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
-            }
-            (MouseCaptureSupport::Picker, HotkeySupport::Global) => {
-                "Press F1 or click Pick On Screen, then click the target point on this monitor"
-            }
-            (MouseCaptureSupport::Picker, HotkeySupport::FocusedOnly) => {
-                "Focus this window and press F1, or click Pick On Screen, then click the target point on this monitor"
-            }
-        }
-    }
-
-    fn mouse_capture_button_label(&self) -> &'static str {
-        "Pick On Screen"
     }
 
     fn platform_notice(&self) -> Option<&'static str> {
@@ -446,19 +441,6 @@ impl App {
         })
     }
 
-    fn capture_mouse_position(&mut self) {
-        match capture_mouse_position(&self.captured_position, &self.position_captured) {
-            Ok(()) => {
-                self.apply_captured_position();
-                self.position_captured.store(false, Ordering::Release);
-                self.status_message = Some(String::from("Mouse position captured."));
-            }
-            Err(err) => {
-                self.status_message = Some(err);
-            }
-        }
-    }
-
     fn take_mouse_capture_picker_restore_state(&mut self) -> Option<ViewportRestoreState> {
         self.mouse_capture_picker
             .take()
@@ -473,20 +455,33 @@ impl App {
         Self::restore_viewport_state(ctx, previous);
     }
 
-    fn begin_mouse_capture_from_button(&mut self, ctx: &egui::Context) {
-        self.start_mouse_capture_picker(ctx);
-    }
-
-    fn begin_mouse_capture_from_hotkey(&mut self, ctx: &egui::Context) {
-        match self.mouse_capture_support {
-            MouseCaptureSupport::Direct => self.capture_mouse_position(),
-            MouseCaptureSupport::Picker => self.start_mouse_capture_picker(ctx),
+    fn capture_mouse_position_direct(&mut self) {
+        match capture_mouse_position(&self.captured_position, &self.position_captured) {
+            Ok(()) => {
+                self.apply_pending_direct_capture();
+            }
+            Err(err) => {
+                self.status_message = Some(err);
+            }
         }
     }
 
+    fn apply_pending_direct_capture(&mut self) -> bool {
+        if !self.position_captured.swap(false, Ordering::AcqRel) {
+            return false;
+        }
+
+        if !self.can_capture_mouse_position_direct() {
+            return false;
+        }
+
+        self.apply_captured_position();
+        self.status_message = Some(String::from("Mouse position captured."));
+        true
+    }
+
     fn apply_mouse_capture_picker_selection(&mut self, x: i32, y: i32) {
-        self.mouse_x = x.to_string();
-        self.mouse_y = y.to_string();
+        self.selected_mouse_position = Some((x, y));
         self.status_message = Some(format!("Mouse position captured at ({x}, {y})."));
     }
 
@@ -631,10 +626,10 @@ impl App {
             return;
         }
 
-        let capture_requested = self.adding == AddingState::MouseClick
+        let capture_requested = self.can_capture_mouse_position_direct()
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F1));
         if capture_requested {
-            self.begin_mouse_capture_from_hotkey(ctx);
+            self.capture_mouse_position_direct();
         }
 
         let stop_requested = worker_active
@@ -663,7 +658,10 @@ impl App {
                         )
                         .clicked()
                     {
-                        self.toggle_adding(state);
+                        match state {
+                            AddingState::MouseClick => self.start_mouse_click_flow(ui.ctx()),
+                            _ => self.toggle_adding(state),
+                        }
                     }
                 }
             } else {
@@ -678,7 +676,7 @@ impl App {
                         )
                         .clicked()
                     {
-                        self.toggle_adding(AddingState::MouseClick);
+                        self.start_mouse_click_flow(ui.ctx());
                     }
                     if ui
                         .add_sized(
@@ -704,6 +702,15 @@ impl App {
     }
 
     fn render_mouse_click_form(&mut self, ui: &mut egui::Ui) {
+        let (x_display, y_display) = match self.selected_mouse_position {
+            Some((x, y)) => (x.to_string(), y.to_string()),
+            None => (
+                String::from("Not picked yet"),
+                String::from("Not picked yet"),
+            ),
+        };
+        let has_selected_position = self.selected_mouse_position.is_some();
+
         ui.group(|ui| {
             ui.label("Mouse Click:");
             ui.horizontal_wrapped(|ui| {
@@ -713,26 +720,9 @@ impl App {
 
             if Self::form_stacks(ui.available_width()) {
                 ui.label("X:");
-                ui.add_sized(
-                    [ui.available_width(), 0.0],
-                    egui::TextEdit::singleline(&mut self.mouse_x),
-                );
+                ui.monospace(&x_display);
                 ui.label("Y:");
-                ui.add_sized(
-                    [ui.available_width(), 0.0],
-                    egui::TextEdit::singleline(&mut self.mouse_y),
-                );
-
-                if ui
-                    .add_sized(
-                        [ui.available_width(), 0.0],
-                        egui::Button::new(self.mouse_capture_button_label()),
-                    )
-                    .clicked()
-                {
-                    self.begin_mouse_capture_from_button(ui.ctx());
-                }
-                ui.label(self.mouse_capture_hint());
+                ui.monospace(&y_display);
             } else {
                 let field_width =
                     ((ui.available_width() - ui.spacing().item_spacing.x) / 2.0).max(120.0);
@@ -742,35 +732,32 @@ impl App {
                         ui.label("X:");
                         ui.add_sized(
                             [field_width, 0.0],
-                            egui::TextEdit::singleline(&mut self.mouse_x),
+                            egui::Label::new(egui::RichText::new(&x_display).monospace()),
                         );
                     });
                     ui.vertical(|ui| {
                         ui.label("Y:");
                         ui.add_sized(
                             [field_width, 0.0],
-                            egui::TextEdit::singleline(&mut self.mouse_y),
+                            egui::Label::new(egui::RichText::new(&y_display).monospace()),
                         );
                     });
-                });
-
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button(self.mouse_capture_button_label()).clicked() {
-                        self.begin_mouse_capture_from_button(ui.ctx());
-                    }
-                    ui.label(self.mouse_capture_hint());
                 });
             }
 
             ui.label(
                 egui::RichText::new(
-                    "Pick On Screen opens a transparent overlay on this window's monitor. Move this app onto the target monitor first.",
+                    "Add Mouse Click opens a transparent overlay on this window's monitor. Move this app onto the target monitor first.",
                 )
                 .color(COLOR_INFO),
             );
+            ui.label(self.mouse_capture_hint());
 
             if ui
-                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
+                .add_enabled(
+                    has_selected_position,
+                    egui::Button::new("Add"),
+                )
                 .clicked()
             {
                 self.try_add_mouse_click();
@@ -1012,9 +999,11 @@ impl eframe::App for App {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Poll hotkeys
+        let direct_capture_enabled = self.can_capture_mouse_position_direct();
         if let Some(hotkey_manager) = &self.hotkey_manager {
             if let Some(message) = hotkey_manager.poll(
                 &self.running,
+                direct_capture_enabled,
                 &self.captured_position,
                 &self.position_captured,
             ) {
@@ -1025,12 +1014,7 @@ impl eframe::App for App {
         self.poll_status_messages();
         self.reap_worker();
         self.handle_focused_hotkeys(ctx, self.worker_active());
-
-        // Check if F1 captured a position
-        if self.position_captured.load(Ordering::Acquire) {
-            self.apply_captured_position();
-            self.position_captured.store(false, Ordering::Release);
-        }
+        self.apply_pending_direct_capture();
 
         let is_running = self.running.load(Ordering::Acquire);
         let worker_active = self.worker_active();
@@ -1105,30 +1089,28 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn opening_mouse_click_form_clears_saved_coordinates() {
+    fn starting_mouse_click_flow_clears_saved_position_and_opens_picker() {
         let mut app = App::new_for_tests();
-        app.mouse_x = String::from("120");
-        app.mouse_y = String::from("340");
+        let ctx = egui::Context::default();
+        app.selected_mouse_position = Some((120, 340));
 
-        app.toggle_adding(AddingState::MouseClick);
+        app.start_mouse_click_flow(&ctx);
 
         assert_eq!(app.adding, AddingState::MouseClick);
-        assert!(app.mouse_x.is_empty());
-        assert!(app.mouse_y.is_empty());
+        assert_eq!(app.selected_mouse_position, None);
+        assert!(app.mouse_capture_picker.is_some());
     }
 
     #[test]
-    fn adding_mouse_click_clears_coordinates_and_closes_form() {
+    fn adding_mouse_click_clears_selected_position_and_closes_form() {
         let mut app = App::new_for_tests();
         app.mouse_button = MouseButton::Right;
-        app.open_mouse_click_form();
-        app.mouse_x = String::from("45");
-        app.mouse_y = String::from("90");
+        app.adding = AddingState::MouseClick;
+        app.selected_mouse_position = Some((45, 90));
 
         assert!(app.try_add_mouse_click());
         assert_eq!(app.adding, AddingState::None);
-        assert!(app.mouse_x.is_empty());
-        assert!(app.mouse_y.is_empty());
+        assert_eq!(app.selected_mouse_position, None);
         assert_eq!(app.actions.len(), 1);
 
         match &app.actions[0] {
@@ -1142,28 +1124,23 @@ mod tests {
     }
 
     #[test]
-    fn non_mouse_forms_do_not_reset_coordinates() {
+    fn non_mouse_forms_do_not_reset_selected_position() {
         let mut app = App::new_for_tests();
-        app.mouse_x = String::from("12");
-        app.mouse_y = String::from("34");
+        app.selected_mouse_position = Some((12, 34));
 
         app.toggle_adding(AddingState::KeyPress);
         assert_eq!(app.adding, AddingState::KeyPress);
-        assert_eq!(app.mouse_x, "12");
-        assert_eq!(app.mouse_y, "34");
+        assert_eq!(app.selected_mouse_position, Some((12, 34)));
 
         app.toggle_adding(AddingState::Delay);
         assert_eq!(app.adding, AddingState::Delay);
-        assert_eq!(app.mouse_x, "12");
-        assert_eq!(app.mouse_y, "34");
+        assert_eq!(app.selected_mouse_position, Some((12, 34)));
     }
 
     #[test]
-    fn invalid_mouse_click_coordinates_leave_form_open() {
+    fn mouse_click_without_selected_position_leaves_form_open() {
         let mut app = App::new_for_tests();
-        app.open_mouse_click_form();
-        app.mouse_x = String::from("12");
-        app.mouse_y = String::from("abc");
+        app.adding = AddingState::MouseClick;
 
         assert!(!app.try_add_mouse_click());
         assert_eq!(app.adding, AddingState::MouseClick);
@@ -1294,23 +1271,67 @@ mod tests {
     }
 
     #[test]
-    fn platform_copy_changes_with_support_modes() {
+    fn platform_notice_changes_with_support_modes() {
         let mut app = App::new_for_tests();
 
         app.hotkey_support = HotkeySupport::Global;
         app.mouse_capture_support = MouseCaptureSupport::Direct;
-        assert_eq!(app.mouse_capture_button_label(), "Pick On Screen");
-        assert_eq!(
-            app.mouse_capture_hint(),
-            "Press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
-        );
         assert_eq!(app.platform_notice(), None);
+        assert!(app.mouse_capture_hint().contains("Press F1"));
 
         app.hotkey_support = HotkeySupport::FocusedOnly;
         app.mouse_capture_support = MouseCaptureSupport::Picker;
-        assert_eq!(app.mouse_capture_button_label(), "Pick On Screen");
-        assert!(app.mouse_capture_hint().contains("Pick On Screen"));
         assert!(app.platform_notice().unwrap().contains("Wayland detected"));
+        assert!(app
+            .mouse_capture_hint()
+            .contains("only through the transparent overlay"));
+    }
+
+    #[test]
+    fn direct_capture_hotkey_requires_mouse_click_form_without_picker() {
+        let mut app = App::new_for_tests();
+
+        assert!(!app.can_capture_mouse_position_direct());
+
+        app.adding = AddingState::MouseClick;
+        assert!(app.can_capture_mouse_position_direct());
+
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+        assert!(!app.can_capture_mouse_position_direct());
+
+        app.mouse_capture_picker = None;
+        app.mouse_capture_support = MouseCaptureSupport::Picker;
+        assert!(!app.can_capture_mouse_position_direct());
+    }
+
+    #[test]
+    fn applying_pending_direct_capture_updates_selected_position_and_status() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::MouseClick;
+        app.captured_position.0.store(320, Ordering::Relaxed);
+        app.captured_position.1.store(640, Ordering::Relaxed);
+        app.position_captured.store(true, Ordering::Release);
+
+        assert!(app.apply_pending_direct_capture());
+        assert_eq!(app.selected_mouse_position, Some((320, 640)));
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Mouse position captured.")
+        );
+    }
+
+    #[test]
+    fn applying_pending_direct_capture_is_ignored_while_picker_is_active() {
+        let mut app = App::new_for_tests();
+        app.adding = AddingState::MouseClick;
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+        app.captured_position.0.store(100, Ordering::Relaxed);
+        app.captured_position.1.store(200, Ordering::Relaxed);
+        app.position_captured.store(true, Ordering::Release);
+
+        assert!(!app.apply_pending_direct_capture());
+        assert_eq!(app.selected_mouse_position, None);
+        assert_eq!(app.position_captured.load(Ordering::Acquire), false);
     }
 
     #[test]
@@ -1353,8 +1374,26 @@ mod tests {
         app.apply_mouse_capture_picker_selection(25, 40);
 
         assert!(restore_state.is_some());
-        assert_eq!(app.mouse_x, "25");
-        assert_eq!(app.mouse_y, "40");
+        assert_eq!(app.selected_mouse_position, Some((25, 40)));
         assert!(app.mouse_capture_picker.is_none());
+    }
+
+    #[test]
+    fn cancelling_picker_keeps_mouse_click_form_open() {
+        let mut app = App::new_for_tests();
+        let ctx = egui::Context::default();
+        app.adding = AddingState::MouseClick;
+        app.selected_mouse_position = Some((25, 40));
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+
+        app.cancel_mouse_capture_picker(&ctx);
+
+        assert_eq!(app.adding, AddingState::MouseClick);
+        assert_eq!(app.selected_mouse_position, Some((25, 40)));
+        assert!(app.mouse_capture_picker.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Mouse position capture cancelled.")
+        );
     }
 }

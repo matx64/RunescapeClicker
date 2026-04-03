@@ -321,7 +321,6 @@ impl HotkeyManager {
 
         let f2 = HotKey::new(Some(Modifiers::empty()), Code::F2);
         let f1 = HotKey::new(Some(Modifiers::empty()), Code::F1);
-
         let f2_id = f2.id();
         let f1_id = f1.id();
 
@@ -344,9 +343,34 @@ impl HotkeyManager {
         self.support
     }
 
+    fn handle_pressed_event_with_capture<F>(
+        &self,
+        event_id: u32,
+        running: &Arc<AtomicBool>,
+        capture_enabled: bool,
+        captured_position: &Arc<(AtomicI32, AtomicI32)>,
+        position_captured: &Arc<AtomicBool>,
+        capture_mouse_position_fn: F,
+    ) -> Option<String>
+    where
+        F: FnOnce(&Arc<(AtomicI32, AtomicI32)>, &Arc<AtomicBool>) -> Result<(), String>,
+    {
+        if Some(event_id) == self.f2_id {
+            running.store(false, Ordering::Release);
+            return None;
+        }
+
+        if capture_enabled && Some(event_id) == self.f1_id {
+            return capture_mouse_position_fn(captured_position, position_captured).err();
+        }
+
+        None
+    }
+
     pub fn poll(
         &self,
         running: &Arc<AtomicBool>,
+        capture_enabled: bool,
         captured_position: &Arc<(AtomicI32, AtomicI32)>,
         position_captured: &Arc<AtomicBool>,
     ) -> Option<String> {
@@ -361,12 +385,15 @@ impl HotkeyManager {
                 continue;
             }
 
-            if Some(event.id) == self.f2_id {
-                running.store(false, Ordering::Release);
-            } else if Some(event.id) == self.f1_id {
-                if let Err(err) = capture_mouse_position(captured_position, position_captured) {
-                    error_message = Some(err);
-                }
+            if let Some(message) = self.handle_pressed_event_with_capture(
+                event.id,
+                running,
+                capture_enabled,
+                captured_position,
+                position_captured,
+                capture_mouse_position,
+            ) {
+                error_message = Some(message);
             }
         }
 
@@ -447,6 +474,100 @@ mod tests {
     fn global_support_uses_global_hotkey_copy() {
         assert_eq!(HotkeySupport::Global.stop_hint(), "seconds OR F2 press");
         assert!(HotkeySupport::Global.notice().is_none());
+    }
+
+    #[test]
+    fn focused_only_hotkey_manager_poll_is_noop() {
+        let manager = HotkeyManager {
+            support: HotkeySupport::FocusedOnly,
+            _manager: None,
+            f2_id: None,
+            f1_id: None,
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let captured_position = Arc::new((AtomicI32::new(0), AtomicI32::new(0)));
+        let position_captured = Arc::new(AtomicBool::new(false));
+
+        assert_eq!(
+            manager.poll(&running, true, &captured_position, &position_captured),
+            None
+        );
+        assert!(running.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn pressed_f2_requests_stop() {
+        let manager = HotkeyManager {
+            support: HotkeySupport::Global,
+            _manager: None,
+            f2_id: Some(10),
+            f1_id: Some(11),
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let captured_position = Arc::new((AtomicI32::new(0), AtomicI32::new(0)));
+        let position_captured = Arc::new(AtomicBool::new(false));
+
+        let result = manager.handle_pressed_event_with_capture(
+            10,
+            &running,
+            true,
+            &captured_position,
+            &position_captured,
+            |_, _| Ok(()),
+        );
+
+        assert_eq!(result, None);
+        assert!(!running.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn pressed_f1_returns_capture_error_when_enabled() {
+        let manager = HotkeyManager {
+            support: HotkeySupport::Global,
+            _manager: None,
+            f2_id: Some(10),
+            f1_id: Some(11),
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let captured_position = Arc::new((AtomicI32::new(0), AtomicI32::new(0)));
+        let position_captured = Arc::new(AtomicBool::new(false));
+
+        let result = manager.handle_pressed_event_with_capture(
+            11,
+            &running,
+            true,
+            &captured_position,
+            &position_captured,
+            |_, _| Err(String::from("capture failed")),
+        );
+
+        assert_eq!(result.as_deref(), Some("capture failed"));
+        assert!(running.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn pressed_f1_is_ignored_when_capture_is_disabled() {
+        let manager = HotkeyManager {
+            support: HotkeySupport::Global,
+            _manager: None,
+            f2_id: Some(10),
+            f1_id: Some(11),
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let captured_position = Arc::new((AtomicI32::new(0), AtomicI32::new(0)));
+        let position_captured = Arc::new(AtomicBool::new(false));
+
+        let result = manager.handle_pressed_event_with_capture(
+            11,
+            &running,
+            false,
+            &captured_position,
+            &position_captured,
+            |_, _| panic!("capture should be disabled"),
+        );
+
+        assert_eq!(result, None);
+        assert!(!position_captured.load(Ordering::Acquire));
     }
 
     #[test]
