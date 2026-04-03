@@ -40,6 +40,12 @@ struct ViewportRestoreState {
     fullscreen: bool,
 }
 
+#[derive(Clone, Copy, Default)]
+struct MouseCapturePickerSession {
+    restore_state: ViewportRestoreState,
+    waiting_for_release: bool,
+}
+
 pub struct App {
     actions: Vec<Action>,
     stop_condition: StopCondition,
@@ -67,7 +73,7 @@ pub struct App {
     hotkey_manager: Option<HotkeyManager>,
     hotkey_support: HotkeySupport,
     mouse_capture_support: MouseCaptureSupport,
-    mouse_capture_picker: Option<ViewportRestoreState>,
+    mouse_capture_picker: Option<MouseCapturePickerSession>,
 
     // Runtime status surfaced from background work
     status_message: Option<String>,
@@ -338,10 +344,10 @@ impl App {
     fn mouse_capture_hint(&self) -> &'static str {
         match (self.mouse_capture_support, self.hotkey_support) {
             (MouseCaptureSupport::Direct, HotkeySupport::Global) => {
-                "Press F1 or click Capture"
+                "Press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
             }
             (MouseCaptureSupport::Direct, HotkeySupport::FocusedOnly) => {
-                "Focus this window and press F1, or click Capture"
+                "Focus this window and press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
             }
             (MouseCaptureSupport::Picker, HotkeySupport::Global) => {
                 "Press F1 or click Pick On Screen, then click the target point on this monitor"
@@ -353,10 +359,7 @@ impl App {
     }
 
     fn mouse_capture_button_label(&self) -> &'static str {
-        match self.mouse_capture_support {
-            MouseCaptureSupport::Direct => "Capture",
-            MouseCaptureSupport::Picker => "Pick On Screen",
-        }
+        "Pick On Screen"
     }
 
     fn platform_notice(&self) -> Option<&'static str> {
@@ -386,11 +389,7 @@ impl App {
         })
     }
 
-    fn restore_viewport(&mut self, ctx: &egui::Context) {
-        let Some(previous) = self.mouse_capture_picker.take() else {
-            return;
-        };
-
+    fn restore_viewport_state(ctx: &egui::Context, previous: ViewportRestoreState) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(previous.fullscreen));
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(previous.maximized));
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
@@ -406,12 +405,19 @@ impl App {
         }
     }
 
+    fn open_mouse_capture_picker(&mut self, restore_state: ViewportRestoreState) {
+        self.mouse_capture_picker = Some(MouseCapturePickerSession {
+            restore_state,
+            waiting_for_release: true,
+        });
+    }
+
     fn start_mouse_capture_picker(&mut self, ctx: &egui::Context) {
         if self.mouse_capture_picker.is_some() {
             return;
         }
 
-        self.mouse_capture_picker = Some(Self::current_viewport_restore_state(ctx));
+        self.open_mouse_capture_picker(Self::current_viewport_restore_state(ctx));
         self.status_message = Some(String::from(
             "Click the target point on this monitor to capture the mouse position. This overlay is intended for windowed or borderless apps. Press Esc to cancel.",
         ));
@@ -453,24 +459,66 @@ impl App {
         }
     }
 
-    fn begin_mouse_capture(&mut self, ctx: &egui::Context) {
+    fn take_mouse_capture_picker_restore_state(&mut self) -> Option<ViewportRestoreState> {
+        self.mouse_capture_picker
+            .take()
+            .map(|session| session.restore_state)
+    }
+
+    fn restore_viewport(&mut self, ctx: &egui::Context) {
+        let Some(previous) = self.take_mouse_capture_picker_restore_state() else {
+            return;
+        };
+
+        Self::restore_viewport_state(ctx, previous);
+    }
+
+    fn begin_mouse_capture_from_button(&mut self, ctx: &egui::Context) {
+        self.start_mouse_capture_picker(ctx);
+    }
+
+    fn begin_mouse_capture_from_hotkey(&mut self, ctx: &egui::Context) {
         match self.mouse_capture_support {
             MouseCaptureSupport::Direct => self.capture_mouse_position(),
             MouseCaptureSupport::Picker => self.start_mouse_capture_picker(ctx),
         }
     }
 
-    fn complete_mouse_capture_picker(&mut self, ctx: &egui::Context, pos: egui::Pos2) {
-        let (x, y) = Self::picker_pos_to_pixels(ctx, pos);
+    fn apply_mouse_capture_picker_selection(&mut self, x: i32, y: i32) {
         self.mouse_x = x.to_string();
         self.mouse_y = y.to_string();
-        self.restore_viewport(ctx);
         self.status_message = Some(format!("Mouse position captured at ({x}, {y})."));
+    }
+
+    fn complete_mouse_capture_picker(&mut self, ctx: &egui::Context, pos: egui::Pos2) {
+        let (x, y) = Self::picker_pos_to_pixels(ctx, pos);
+        let previous = self.take_mouse_capture_picker_restore_state();
+        self.apply_mouse_capture_picker_selection(x, y);
+        if let Some(previous) = previous {
+            Self::restore_viewport_state(ctx, previous);
+        }
     }
 
     fn cancel_mouse_capture_picker(&mut self, ctx: &egui::Context) {
         self.restore_viewport(ctx);
         self.status_message = Some(String::from("Mouse position capture cancelled."));
+    }
+
+    fn picker_waiting_for_release(&self) -> bool {
+        self.mouse_capture_picker
+            .as_ref()
+            .map(|session| session.waiting_for_release)
+            .unwrap_or(false)
+    }
+
+    fn arm_mouse_capture_picker_after_release(&mut self, primary_down: bool) {
+        if primary_down {
+            return;
+        }
+
+        if let Some(session) = self.mouse_capture_picker.as_mut() {
+            session.waiting_for_release = false;
+        }
     }
 
     fn render_mouse_capture_picker(&mut self, ctx: &egui::Context) {
@@ -482,13 +530,19 @@ impl App {
             return;
         }
 
-        let captured_pos = ctx.input(|input| {
-            if input.pointer.primary_clicked() {
-                input.pointer.interact_pos()
-            } else {
-                None
-            }
-        });
+        let captured_pos = if self.picker_waiting_for_release() {
+            let primary_down = ctx.input(|input| input.pointer.primary_down());
+            self.arm_mouse_capture_picker_after_release(primary_down);
+            None
+        } else {
+            ctx.input(|input| {
+                if input.pointer.primary_clicked() {
+                    input.pointer.interact_pos()
+                } else {
+                    None
+                }
+            })
+        };
         if let Some(pos) = captured_pos {
             self.complete_mouse_capture_picker(ctx, pos);
             return;
@@ -580,7 +634,7 @@ impl App {
         let capture_requested = self.adding == AddingState::MouseClick
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F1));
         if capture_requested {
-            self.begin_mouse_capture(ctx);
+            self.begin_mouse_capture_from_hotkey(ctx);
         }
 
         let stop_requested = worker_active
@@ -676,7 +730,7 @@ impl App {
                     )
                     .clicked()
                 {
-                    self.begin_mouse_capture(ui.ctx());
+                    self.begin_mouse_capture_from_button(ui.ctx());
                 }
                 ui.label(self.mouse_capture_hint());
             } else {
@@ -702,20 +756,18 @@ impl App {
 
                 ui.horizontal_wrapped(|ui| {
                     if ui.button(self.mouse_capture_button_label()).clicked() {
-                        self.begin_mouse_capture(ui.ctx());
+                        self.begin_mouse_capture_from_button(ui.ctx());
                     }
                     ui.label(self.mouse_capture_hint());
                 });
             }
 
-            if self.mouse_capture_support == MouseCaptureSupport::Picker {
-                ui.label(
-                    egui::RichText::new(
-                        "Wayland: the picker opens as a transparent overlay on this window's monitor for windowed or borderless apps. Move this app onto the target monitor first.",
-                    )
-                    .color(COLOR_INFO),
-                );
-            }
+            ui.label(
+                egui::RichText::new(
+                    "Pick On Screen opens a transparent overlay on this window's monitor. Move this app onto the target monitor first.",
+                )
+                .color(COLOR_INFO),
+            );
 
             if ui
                 .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
@@ -1247,8 +1299,11 @@ mod tests {
 
         app.hotkey_support = HotkeySupport::Global;
         app.mouse_capture_support = MouseCaptureSupport::Direct;
-        assert_eq!(app.mouse_capture_button_label(), "Capture");
-        assert_eq!(app.mouse_capture_hint(), "Press F1 or click Capture");
+        assert_eq!(app.mouse_capture_button_label(), "Pick On Screen");
+        assert_eq!(
+            app.mouse_capture_hint(),
+            "Press F1 to capture the current mouse position, or click Pick On Screen to choose a point visually"
+        );
         assert_eq!(app.platform_notice(), None);
 
         app.hotkey_support = HotkeySupport::FocusedOnly;
@@ -1256,5 +1311,50 @@ mod tests {
         assert_eq!(app.mouse_capture_button_label(), "Pick On Screen");
         assert!(app.mouse_capture_hint().contains("Pick On Screen"));
         assert!(app.platform_notice().unwrap().contains("Wayland detected"));
+    }
+
+    #[test]
+    fn opening_picker_waits_for_release_before_capture() {
+        let mut app = App::new_for_tests();
+
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+
+        assert!(app.picker_waiting_for_release());
+        assert!(app.mouse_capture_picker.is_some());
+    }
+
+    #[test]
+    fn picker_stays_blocked_while_primary_button_is_still_down() {
+        let mut app = App::new_for_tests();
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+
+        app.arm_mouse_capture_picker_after_release(true);
+
+        assert!(app.picker_waiting_for_release());
+    }
+
+    #[test]
+    fn picker_arms_after_primary_button_is_released() {
+        let mut app = App::new_for_tests();
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+
+        app.arm_mouse_capture_picker_after_release(false);
+
+        assert!(!app.picker_waiting_for_release());
+    }
+
+    #[test]
+    fn picker_selection_applies_coordinates_and_clears_session() {
+        let mut app = App::new_for_tests();
+        app.open_mouse_capture_picker(ViewportRestoreState::default());
+        app.arm_mouse_capture_picker_after_release(false);
+        let restore_state = app.take_mouse_capture_picker_restore_state();
+
+        app.apply_mouse_capture_picker_selection(25, 40);
+
+        assert!(restore_state.is_some());
+        assert_eq!(app.mouse_x, "25");
+        assert_eq!(app.mouse_y, "40");
+        assert!(app.mouse_capture_picker.is_none());
     }
 }

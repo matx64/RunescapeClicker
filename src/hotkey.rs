@@ -123,7 +123,10 @@ fn normalized_env_value(value: Option<String>) -> Option<String> {
 fn is_wayland_session_from_env(env: &SessionEnvironment) -> bool {
     env.wayland_display.is_some()
         || matches!(
-            env.session_type.as_deref().map(str::to_ascii_lowercase).as_deref(),
+            env.session_type
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
             Some("wayland")
         )
 }

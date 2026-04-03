@@ -110,12 +110,7 @@ impl ExecutionRuntime for FakeRuntime {
         self.elapsed
     }
 
-    fn sleep(
-        &mut self,
-        duration: Duration,
-        running: &AtomicBool,
-        stop: &StopCondition,
-    ) -> bool {
+    fn sleep(&mut self, duration: Duration, running: &AtomicBool, stop: &StopCondition) -> bool {
         if !running.load(Ordering::Acquire) {
             return false;
         }

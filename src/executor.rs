@@ -323,5 +323,4 @@ mod tests {
         assert_eq!(string_to_key("hello"), Key::Unicode('h'));
         assert_eq!(string_to_key(""), Key::Unicode('a'));
     }
-
 }
