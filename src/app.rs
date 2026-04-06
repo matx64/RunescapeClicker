@@ -11,6 +11,7 @@ use std::time::Duration;
 const COLOR_MOUSE: egui::Color32 = egui::Color32::from_rgb(55, 114, 255);
 const COLOR_KEYBOARD: egui::Color32 = egui::Color32::from_rgb(179, 0, 137);
 const COLOR_DELAY: egui::Color32 = egui::Color32::from_rgb(242, 187, 5);
+const COLOR_CLEAR: egui::Color32 = egui::Color32::from_rgb(123, 132, 145);
 const COLOR_TOOLBAR_FILL: egui::Color32 = egui::Color32::from_rgb(36, 41, 48);
 const COLOR_START: egui::Color32 = egui::Color32::from_rgb(0, 133, 72);
 const COLOR_STOP: egui::Color32 = egui::Color32::from_rgb(210, 62, 62);
@@ -215,6 +216,15 @@ impl App {
             true
         } else {
             false
+        }
+    }
+
+    fn clear_actions(&mut self) -> bool {
+        if self.actions.is_empty() {
+            false
+        } else {
+            self.actions.clear();
+            true
         }
     }
 
@@ -664,9 +674,18 @@ impl App {
                         }
                     }
                 }
+                if ui
+                    .add_sized(
+                        [ui.available_width(), TOOLBAR_BUTTON_HEIGHT],
+                        Self::toolbar_button("Clear", COLOR_CLEAR),
+                    )
+                    .clicked()
+                {
+                    self.clear_actions();
+                }
             } else {
                 let button_spacing = ui.spacing().item_spacing.x;
-                let button_width = ((available_width - (button_spacing * 2.0)) / 3.0).max(0.0);
+                let button_width = ((available_width - (button_spacing * 3.0)) / 4.0).max(0.0);
 
                 ui.horizontal(|ui| {
                     if ui
@@ -695,6 +714,15 @@ impl App {
                         .clicked()
                     {
                         self.toggle_adding(AddingState::Delay);
+                    }
+                    if ui
+                        .add_sized(
+                            [button_width, TOOLBAR_BUTTON_HEIGHT],
+                            Self::toolbar_button("Clear", COLOR_CLEAR),
+                        )
+                        .clicked()
+                    {
+                        self.clear_actions();
                     }
                 });
             }
@@ -1217,6 +1245,49 @@ mod tests {
 
         assert!(!app.remove_action(3));
         assert_eq!(app.actions.len(), 1);
+    }
+
+    #[test]
+    fn clear_actions_empties_populated_action_list() {
+        let mut app = App::new_for_tests();
+        app.actions = vec![
+            Action::Delay { ms: 100 },
+            Action::KeyPress {
+                key: String::from("space"),
+            },
+        ];
+
+        assert!(app.clear_actions());
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn clear_actions_is_no_op_when_list_is_empty() {
+        let mut app = App::new_for_tests();
+
+        assert!(!app.clear_actions());
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn clear_actions_preserves_other_editor_state() {
+        let mut app = App::new_for_tests();
+        app.actions.push(Action::Delay { ms: 100 });
+        app.adding = AddingState::KeyPress;
+        app.key_input = String::from("space");
+        app.delay_ms = String::from("250");
+        app.selected_mouse_position = Some((12, 34));
+        app.stop_condition = StopCondition::Timer { seconds: 25 };
+        app.status_message = Some(String::from("ready"));
+
+        assert!(app.clear_actions());
+        assert!(app.actions.is_empty());
+        assert_eq!(app.adding, AddingState::KeyPress);
+        assert_eq!(app.key_input, "space");
+        assert_eq!(app.delay_ms, "250");
+        assert_eq!(app.selected_mouse_position, Some((12, 34)));
+        assert_eq!(app.stop_condition, StopCondition::Timer { seconds: 25 });
+        assert_eq!(app.status_message.as_deref(), Some("ready"));
     }
 
     #[test]
