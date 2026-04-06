@@ -8,6 +8,8 @@ use std::time::Duration;
 #[derive(Default)]
 struct FakeDriverState {
     operations: Vec<String>,
+    current_location: (i32, i32),
+    location_error: Option<String>,
     move_error: Option<String>,
     click_error: Option<String>,
     key_error: Option<String>,
@@ -18,12 +20,22 @@ struct FakeInputDriver {
 }
 
 impl InputDriver for FakeInputDriver {
+    fn mouse_location(&self) -> Result<(i32, i32), String> {
+        let mut state = self.state.lock().unwrap();
+        if let Some(err) = state.location_error.take() {
+            return Err(err);
+        }
+
+        Ok(state.current_location)
+    }
+
     fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), String> {
         let mut state = self.state.lock().unwrap();
         if let Some(err) = state.move_error.take() {
             return Err(err);
         }
 
+        state.current_location = (x, y);
         state.operations.push(format!("move:{x}:{y}"));
         Ok(())
     }
@@ -56,6 +68,8 @@ struct FakeRuntime {
     connect_error: Option<String>,
     anti_detect_delays: VecDeque<u64>,
     delay_jitters: VecDeque<u64>,
+    movement_curve_factors: VecDeque<f64>,
+    post_move_click_delays: VecDeque<u64>,
     elapsed: Duration,
     sleep_log: Arc<Mutex<Vec<Duration>>>,
     stop_on_sleep_call: Option<usize>,
@@ -69,6 +83,8 @@ impl FakeRuntime {
             connect_error: None,
             anti_detect_delays: VecDeque::new(),
             delay_jitters: VecDeque::new(),
+            movement_curve_factors: VecDeque::new(),
+            post_move_click_delays: VecDeque::new(),
             elapsed: Duration::ZERO,
             sleep_log: Arc::new(Mutex::new(Vec::new())),
             stop_on_sleep_call: None,
@@ -106,6 +122,14 @@ impl ExecutionRuntime for FakeRuntime {
         self.delay_jitters.pop_front().unwrap_or_default()
     }
 
+    fn movement_curve_factor(&mut self) -> f64 {
+        self.movement_curve_factors.pop_front().unwrap_or_default()
+    }
+
+    fn post_move_click_delay_ms(&mut self) -> u64 {
+        self.post_move_click_delays.pop_front().unwrap_or_default()
+    }
+
     fn elapsed(&self) -> Duration {
         self.elapsed
     }
@@ -141,8 +165,9 @@ fn successful_sequence_records_expected_operations_and_delays() {
     let (status_tx, status_rx) = mpsc::channel();
     let mut runtime = FakeRuntime::new();
     runtime.anti_detect_delays = VecDeque::from([25, 30]);
-    runtime.delay_jitters = VecDeque::from([40]);
-    runtime.stop_on_sleep_call = Some(3);
+    runtime.delay_jitters = VecDeque::from([0]);
+    runtime.movement_curve_factors = VecDeque::from([0.35]);
+    runtime.post_move_click_delays = VecDeque::from([32]);
 
     execute_sequence_with_runtime(
         &[
@@ -154,30 +179,28 @@ fn successful_sequence_records_expected_operations_and_delays() {
             Action::KeyPress {
                 key: String::from("space"),
             },
-            Action::Delay { ms: 200 },
+            Action::Delay { ms: 900 },
         ],
-        &StopCondition::HotkeyOnly,
+        &StopCondition::Timer { seconds: 1 },
         &running,
         &status_tx,
         &mut runtime,
     );
 
-    assert_eq!(
-        runtime.operations(),
-        vec![
-            String::from("move:10:20"),
-            String::from("click:left"),
-            String::from("key:space"),
-        ]
-    );
-    assert_eq!(
-        runtime.sleep_log(),
-        vec![
-            Duration::from_millis(25),
-            Duration::from_millis(30),
-            Duration::from_millis(240),
-        ]
-    );
+    let operations = runtime.operations();
+    assert!(operations.len() > 3);
+    assert_eq!(operations.last().unwrap(), "key:space");
+    assert_eq!(operations[operations.len() - 2], "click:left");
+    assert_eq!(operations[operations.len() - 3], "move:10:20");
+    assert!(operations[..operations.len() - 2]
+        .iter()
+        .all(|op| op.starts_with("move:")));
+
+    let sleep_log = runtime.sleep_log();
+    assert!(sleep_log.len() > 4);
+    assert_eq!(sleep_log.first().copied(), Some(Duration::from_millis(25)));
+    assert!(sleep_log.contains(&Duration::from_millis(32)));
+    assert_eq!(sleep_log.last().copied(), Some(Duration::from_millis(900)));
     assert!(!running.load(Ordering::Acquire));
     assert!(status_rx.try_recv().is_err());
 }
@@ -211,6 +234,7 @@ fn mouse_move_failure_is_reported() {
     let (status_tx, status_rx) = mpsc::channel();
     let mut runtime = FakeRuntime::new();
     runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.driver_state.lock().unwrap().current_location = (100, 100);
     runtime.driver_state.lock().unwrap().move_error = Some(String::from("cursor locked"));
 
     execute_sequence_with_runtime(
@@ -239,6 +263,9 @@ fn mouse_click_failure_is_reported_after_move() {
     let (status_tx, status_rx) = mpsc::channel();
     let mut runtime = FakeRuntime::new();
     runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.movement_curve_factors = VecDeque::from([0.0]);
+    runtime.post_move_click_delays = VecDeque::from([22]);
+    runtime.driver_state.lock().unwrap().current_location = (90, 120);
     runtime.driver_state.lock().unwrap().click_error = Some(String::from("button jammed"));
 
     execute_sequence_with_runtime(
@@ -257,7 +284,10 @@ fn mouse_click_failure_is_reported_after_move() {
         status_rx.try_recv().unwrap(),
         "Failed to click the mouse: button jammed"
     );
-    assert_eq!(runtime.operations(), vec![String::from("move:3:7")]);
+    let operations = runtime.operations();
+    assert!(operations.len() > 1);
+    assert_eq!(operations.last().unwrap(), "move:3:7");
+    assert!(operations.iter().all(|op| op.starts_with("move:")));
     assert!(!running.load(Ordering::Acquire));
 }
 
@@ -357,6 +387,225 @@ fn empty_action_list_exits_immediately() {
 
     assert!(runtime.operations().is_empty());
     assert!(runtime.sleep_log().is_empty());
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn mouse_click_uses_interpolated_movement_before_click() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([15]);
+    runtime.delay_jitters = VecDeque::from([0]);
+    runtime.movement_curve_factors = VecDeque::from([0.25]);
+    runtime.post_move_click_delays = VecDeque::from([30]);
+    runtime.driver_state.lock().unwrap().current_location = (0, 0);
+
+    execute_sequence_with_runtime(
+        &[
+            Action::MouseClick {
+                button: MouseButton::Left,
+                x: 120,
+                y: 80,
+            },
+            Action::Delay { ms: 900 },
+        ],
+        &StopCondition::Timer { seconds: 1 },
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    let operations = runtime.operations();
+    assert!(operations.len() > 2);
+    assert_eq!(operations.last().unwrap(), "click:left");
+    assert_eq!(operations[operations.len() - 2], "move:120:80");
+    assert!(operations[..operations.len() - 1]
+        .iter()
+        .all(|op| op.starts_with("move:")));
+
+    let sleep_log = runtime.sleep_log();
+    assert!(sleep_log.len() > 3);
+    assert_eq!(sleep_log.first().copied(), Some(Duration::from_millis(15)));
+    assert!(sleep_log.contains(&Duration::from_millis(30)));
+    assert_eq!(sleep_log.last().copied(), Some(Duration::from_millis(900)));
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn interpolated_mouse_movement_stays_within_start_target_bounds() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.movement_curve_factors = VecDeque::from([1.0]);
+    runtime.post_move_click_delays = VecDeque::from([25]);
+    runtime.driver_state.lock().unwrap().current_location = (3, 200);
+
+    execute_sequence_with_runtime(
+        &[
+            Action::MouseClick {
+                button: MouseButton::Left,
+                x: 3,
+                y: 500,
+            },
+            Action::Delay { ms: 1000 },
+        ],
+        &StopCondition::Timer { seconds: 1 },
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    let operations = runtime.operations();
+    assert!(operations.len() > 1);
+    assert_eq!(operations.last().unwrap(), "click:left");
+    assert!(operations[..operations.len() - 1]
+        .iter()
+        .all(|op| op.starts_with("move:3:")));
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn stop_during_mouse_movement_aborts_before_click() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.movement_curve_factors = VecDeque::from([0.0]);
+    runtime.post_move_click_delays = VecDeque::from([28]);
+    runtime.driver_state.lock().unwrap().current_location = (0, 0);
+    runtime.stop_on_sleep_call = Some(2);
+
+    execute_sequence_with_runtime(
+        &[Action::MouseClick {
+            button: MouseButton::Right,
+            x: 200,
+            y: 50,
+        }],
+        &StopCondition::HotkeyOnly,
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    let operations = runtime.operations();
+    assert!(!operations.is_empty());
+    assert!(operations.iter().all(|op| op.starts_with("move:")));
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn mouse_location_failure_falls_back_to_single_move_and_click() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.delay_jitters = VecDeque::from([0]);
+    runtime.post_move_click_delays = VecDeque::from([27]);
+    runtime.driver_state.lock().unwrap().location_error = Some(String::from("unavailable"));
+
+    execute_sequence_with_runtime(
+        &[
+            Action::MouseClick {
+                button: MouseButton::Right,
+                x: 50,
+                y: 60,
+            },
+            Action::Delay { ms: 1000 },
+        ],
+        &StopCondition::Timer { seconds: 1 },
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    assert_eq!(
+        runtime.operations(),
+        vec![String::from("move:50:60"), String::from("click:right"),]
+    );
+    assert_eq!(
+        runtime.sleep_log(),
+        vec![
+            Duration::from_millis(10),
+            Duration::from_millis(27),
+            Duration::from_millis(1000)
+        ]
+    );
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn clicking_same_position_waits_before_click() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.delay_jitters = VecDeque::from([0]);
+    runtime.post_move_click_delays = VecDeque::from([31]);
+    runtime.driver_state.lock().unwrap().current_location = (50, 60);
+
+    execute_sequence_with_runtime(
+        &[
+            Action::MouseClick {
+                button: MouseButton::Left,
+                x: 50,
+                y: 60,
+            },
+            Action::Delay { ms: 1000 },
+        ],
+        &StopCondition::Timer { seconds: 1 },
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    assert_eq!(runtime.operations(), vec![String::from("click:left")]);
+    assert_eq!(
+        runtime.sleep_log(),
+        vec![
+            Duration::from_millis(10),
+            Duration::from_millis(31),
+            Duration::from_millis(1000)
+        ]
+    );
+    assert!(!running.load(Ordering::Acquire));
+    assert!(status_rx.try_recv().is_err());
+}
+
+#[test]
+fn stop_during_post_move_click_delay_aborts_before_click() {
+    let running = AtomicBool::new(true);
+    let (status_tx, status_rx) = mpsc::channel();
+    let mut runtime = FakeRuntime::new();
+    runtime.anti_detect_delays = VecDeque::from([10]);
+    runtime.delay_jitters = VecDeque::from([0]);
+    runtime.post_move_click_delays = VecDeque::from([35]);
+    runtime.driver_state.lock().unwrap().current_location = (50, 60);
+    runtime.stop_on_sleep_call = Some(2);
+
+    execute_sequence_with_runtime(
+        &[Action::MouseClick {
+            button: MouseButton::Left,
+            x: 50,
+            y: 60,
+        }],
+        &StopCondition::HotkeyOnly,
+        &running,
+        &status_tx,
+        &mut runtime,
+    );
+
+    assert!(runtime.operations().is_empty());
+    assert_eq!(
+        runtime.sleep_log(),
+        vec![Duration::from_millis(10), Duration::from_millis(35)]
+    );
     assert!(!running.load(Ordering::Acquire));
     assert!(status_rx.try_recv().is_err());
 }
