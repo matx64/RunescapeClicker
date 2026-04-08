@@ -1,6 +1,7 @@
 use crate::action::{Action, MouseButton, StopCondition};
 use crate::executor;
 use crate::hotkey::{capture_mouse_position, HotkeyManager, HotkeySupport, MouseCaptureSupport};
+use crate::icons::{self, Icon, IconSize};
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -17,20 +18,31 @@ const COLOR_START: egui::Color32 = egui::Color32::from_rgb(0, 133, 72);
 const COLOR_STOP: egui::Color32 = egui::Color32::from_rgb(210, 62, 62);
 const COLOR_INFO: egui::Color32 = egui::Color32::from_rgb(176, 111, 0);
 const COLOR_STATUS: egui::Color32 = egui::Color32::from_rgb(249, 86, 79);
+const COLOR_TEXT_DARK: egui::Color32 = egui::Color32::from_rgb(28, 33, 40);
 const CRASH_MESSAGE: &str = "Automation thread crashed.";
-const TOOLBAR_BUTTON_HEIGHT: f32 = 46.0;
-const START_BUTTON_SIZE: egui::Vec2 = egui::vec2(140.0, 48.0);
-const TOOLBAR_STACK_BREAKPOINT: f32 = 440.0;
+const TOOLBAR_BUTTON_HEIGHT: f32 = 54.0;
+const START_BUTTON_SIZE: egui::Vec2 = egui::vec2(160.0, 54.0);
+const TOOLBAR_STACK_BREAKPOINT: f32 = 430.0;
+const TOOLBAR_GRID_BREAKPOINT: f32 = 760.0;
 const FORM_STACK_BREAKPOINT: f32 = 360.0;
 const ACTION_ROW_STACK_BREAKPOINT: f32 = 340.0;
-const ACTION_CONTROL_WIDTH: f32 = 72.0;
+const ACTION_CONTROL_WIDTH: f32 = 112.0;
+const ACTION_ICON_BUTTON_SIZE: egui::Vec2 = egui::vec2(32.0, 32.0);
+const FORM_SUBMIT_BUTTON_SIZE: egui::Vec2 = egui::vec2(104.0, 40.0);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AddingState {
     None,
     MouseClick,
     KeyPress,
     Delay,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToolbarLayout {
+    Row,
+    Grid,
+    Stack,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -86,7 +98,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
+
         let mut status_message = None;
         let hotkey_manager = match HotkeyManager::new() {
             Ok(manager) => Some(manager),
@@ -246,39 +260,219 @@ impl App {
         }
     }
 
-    fn toolbar_button(label: &str, accent: egui::Color32) -> egui::Button<'static> {
-        egui::Button::new(
-            egui::RichText::new(label)
-                .size(16.0)
-                .strong()
-                .color(egui::Color32::WHITE),
-        )
-        .wrap()
-        .fill(COLOR_TOOLBAR_FILL)
-        .stroke(egui::Stroke::new(2.0, accent))
-        .corner_radius(8)
-        .min_size(egui::vec2(0.0, TOOLBAR_BUTTON_HEIGHT))
+    fn action_icon(action: &Action) -> Icon {
+        match action {
+            Action::MouseClick { .. } => Icon::MouseClick,
+            Action::KeyPress { .. } => Icon::Keyboard,
+            Action::Delay { .. } => Icon::Delay,
+        }
     }
 
-    fn run_button(label: &str, fill: egui::Color32) -> egui::Button<'static> {
-        egui::Button::new(
-            egui::RichText::new(label)
-                .size(18.0)
-                .strong()
-                .color(egui::Color32::WHITE),
+    fn styled_button_fill(
+        base_fill: egui::Color32,
+        response: &egui::Response,
+        enabled: bool,
+    ) -> egui::Color32 {
+        if !enabled {
+            base_fill.gamma_multiply(0.65)
+        } else if response.is_pointer_button_down_on() {
+            base_fill.gamma_multiply(0.92)
+        } else if response.hovered() {
+            base_fill.gamma_multiply(1.08)
+        } else {
+            base_fill
+        }
+    }
+
+    fn styled_button_stroke(
+        base_stroke: egui::Stroke,
+        response: &egui::Response,
+        enabled: bool,
+    ) -> egui::Stroke {
+        if !enabled {
+            egui::Stroke::new(base_stroke.width, base_stroke.color.gamma_multiply(0.6))
+        } else if response.hovered() {
+            egui::Stroke::new(base_stroke.width, base_stroke.color.gamma_multiply(1.12))
+        } else {
+            base_stroke
+        }
+    }
+
+    fn render_large_icon_button(
+        ui: &mut egui::Ui,
+        size: egui::Vec2,
+        icon: Icon,
+        icon_size: IconSize,
+        label: &str,
+        text_size: f32,
+        fill: egui::Color32,
+        stroke: egui::Stroke,
+        foreground: Option<egui::Color32>,
+    ) -> egui::Response {
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+        });
+
+        if ui.is_rect_visible(rect) {
+            let visuals = ui.style().interact(&response);
+            let enabled = ui.is_enabled();
+            let frame_fill = Self::styled_button_fill(fill, &response, enabled);
+            let frame_stroke = Self::styled_button_stroke(stroke, &response, enabled);
+            let frame_rect = rect.expand2(egui::Vec2::splat(visuals.expansion));
+            let inner_rect = rect.shrink2(egui::vec2(18.0, 10.0));
+            let text_color = match foreground {
+                Some(color) if enabled => color,
+                Some(color) => color.gamma_multiply(0.55),
+                None => visuals.text_color(),
+            };
+            let icon_width = icon_size.points();
+            let icon_height = icon_width;
+            let icon_gap = ui.spacing().icon_spacing.max(8.0);
+            let galley = ui.painter().layout_no_wrap(
+                label.to_owned(),
+                egui::FontId::new(text_size, egui::FontFamily::Proportional),
+                text_color,
+            );
+            let content_width = (icon_width + icon_gap + galley.size().x).min(inner_rect.width());
+            let start_x = (inner_rect.center().x - (content_width / 2.0)).max(inner_rect.left());
+            let icon_rect = egui::Rect::from_min_size(
+                egui::pos2(start_x, inner_rect.center().y - (icon_height / 2.0)),
+                egui::vec2(icon_width, icon_height),
+            );
+            let text_pos = egui::pos2(
+                icon_rect.right() + icon_gap,
+                inner_rect.center().y - (galley.size().y / 2.0),
+            );
+
+            ui.painter().rect(
+                frame_rect,
+                egui::CornerRadius::same(8),
+                frame_fill,
+                frame_stroke,
+                egui::StrokeKind::Inside,
+            );
+            icons::tinted(icon, icon_size, text_color).paint_at(ui, icon_rect);
+            ui.painter().galley(text_pos, galley, text_color);
+        }
+
+        if let Some(cursor) = ui.visuals().interact_cursor {
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(cursor);
+            }
+        }
+
+        response
+    }
+
+    fn render_toolbar_button(
+        ui: &mut egui::Ui,
+        width: f32,
+        icon: Icon,
+        label: &str,
+        accent: egui::Color32,
+    ) -> egui::Response {
+        Self::render_large_icon_button(
+            ui,
+            egui::vec2(width, TOOLBAR_BUTTON_HEIGHT),
+            icon,
+            IconSize::Toolbar,
+            label,
+            16.0,
+            COLOR_TOOLBAR_FILL,
+            egui::Stroke::new(2.0, accent),
+            None,
         )
-        .fill(fill)
-        .stroke(egui::Stroke::new(1.0, fill.gamma_multiply(0.7)))
-        .corner_radius(8)
-        .min_size(START_BUTTON_SIZE)
+    }
+
+    fn render_run_button(
+        ui: &mut egui::Ui,
+        icon: Icon,
+        label: &str,
+        fill: egui::Color32,
+    ) -> egui::Response {
+        Self::render_large_icon_button(
+            ui,
+            START_BUTTON_SIZE,
+            icon,
+            IconSize::PrimaryAction,
+            label,
+            18.0,
+            fill,
+            egui::Stroke::new(1.0, fill.gamma_multiply(0.7)),
+            None,
+        )
+    }
+
+    fn action_control_button(icon: Icon, tint: egui::Color32) -> egui::Button<'static> {
+        egui::Button::image(icons::tinted(icon, IconSize::CompactControl, tint))
+            .corner_radius(6)
+            .min_size(ACTION_ICON_BUTTON_SIZE)
+    }
+
+    fn preferred_foreground(fill: egui::Color32) -> egui::Color32 {
+        let [r, g, b, _] = fill.to_array();
+        let luminance =
+            (0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)) / 255.0;
+
+        if luminance > 0.6 {
+            COLOR_TEXT_DARK
+        } else {
+            egui::Color32::WHITE
+        }
+    }
+
+    fn render_form_submit_button(
+        ui: &mut egui::Ui,
+        icon: Icon,
+        accent: egui::Color32,
+    ) -> egui::Response {
+        let foreground = Self::preferred_foreground(accent);
+        let stroke_color = if foreground == egui::Color32::WHITE {
+            accent.gamma_multiply(0.75)
+        } else {
+            foreground.gamma_multiply(0.8)
+        };
+
+        Self::render_large_icon_button(
+            ui,
+            FORM_SUBMIT_BUTTON_SIZE,
+            icon,
+            IconSize::CompactControl,
+            "Add",
+            16.0,
+            accent,
+            egui::Stroke::new(1.0, stroke_color),
+            Some(foreground),
+        )
+    }
+
+    fn render_section_heading(ui: &mut egui::Ui, icon: Icon, title: &str, color: egui::Color32) {
+        ui.horizontal(|ui| {
+            ui.add(icons::tinted(icon, IconSize::SectionHeading, color));
+            ui.label(egui::RichText::new(title).strong().size(16.0).color(color));
+        });
+    }
+
+    fn render_message_row(ui: &mut egui::Ui, icon: Icon, color: egui::Color32, message: &str) {
+        ui.horizontal_wrapped(|ui| {
+            ui.add(icons::tinted(icon, IconSize::StatusRow, color));
+            ui.add(egui::Label::new(egui::RichText::new(message).color(color)).wrap());
+        });
     }
 
     fn worker_active(&self) -> bool {
         self.worker_handle.is_some()
     }
 
-    fn toolbar_stacks(available_width: f32) -> bool {
-        available_width < TOOLBAR_STACK_BREAKPOINT
+    fn toolbar_layout(available_width: f32) -> ToolbarLayout {
+        if available_width < TOOLBAR_STACK_BREAKPOINT {
+            ToolbarLayout::Stack
+        } else if available_width < TOOLBAR_GRID_BREAKPOINT {
+            ToolbarLayout::Grid
+        } else {
+            ToolbarLayout::Row
+        }
     }
 
     fn form_stacks(available_width: f32) -> bool {
@@ -287,6 +481,16 @@ impl App {
 
     fn action_row_stacks(available_width: f32) -> bool {
         available_width < ACTION_ROW_STACK_BREAKPOINT
+    }
+
+    fn handle_toolbar_action(&mut self, state: AddingState, ctx: &egui::Context) {
+        match state {
+            AddingState::MouseClick => self.start_mouse_click_flow(ctx),
+            AddingState::KeyPress | AddingState::Delay => self.toggle_adding(state),
+            AddingState::None => {
+                self.clear_actions();
+            }
+        }
     }
 
     fn poll_status_messages(&mut self) {
@@ -653,78 +857,102 @@ impl App {
 
     fn render_toolbar(&mut self, ui: &mut egui::Ui, worker_active: bool) {
         let available_width = ui.available_width().max(0.0);
+        let actions = [
+            (
+                Icon::MouseClick,
+                "Add Mouse Click",
+                COLOR_MOUSE,
+                AddingState::MouseClick,
+            ),
+            (
+                Icon::Keyboard,
+                "Add Keyboard Press",
+                COLOR_KEYBOARD,
+                AddingState::KeyPress,
+            ),
+            (Icon::Delay, "Add Delay", COLOR_DELAY, AddingState::Delay),
+            (Icon::Clear, "Clear", COLOR_CLEAR, AddingState::None),
+        ];
 
         ui.add_enabled_ui(!worker_active, |ui| {
-            if Self::toolbar_stacks(available_width) {
-                for (label, accent, state) in [
-                    ("Add Mouse Click", COLOR_MOUSE, AddingState::MouseClick),
-                    ("Add Keyboard Press", COLOR_KEYBOARD, AddingState::KeyPress),
-                    ("Add Delay", COLOR_DELAY, AddingState::Delay),
-                ] {
-                    if ui
-                        .add_sized(
-                            [ui.available_width(), TOOLBAR_BUTTON_HEIGHT],
-                            Self::toolbar_button(label, accent),
-                        )
-                        .clicked()
-                    {
-                        match state {
-                            AddingState::MouseClick => self.start_mouse_click_flow(ui.ctx()),
-                            _ => self.toggle_adding(state),
+            match Self::toolbar_layout(available_width) {
+                ToolbarLayout::Stack => {
+                    for (icon, label, accent, state) in actions {
+                        if ui
+                            .scope(|ui| {
+                                Self::render_toolbar_button(
+                                    ui,
+                                    ui.available_width(),
+                                    icon,
+                                    label,
+                                    accent,
+                                )
+                            })
+                            .inner
+                            .clicked()
+                        {
+                            self.handle_toolbar_action(state, ui.ctx());
                         }
                     }
                 }
-                if ui
-                    .add_sized(
-                        [ui.available_width(), TOOLBAR_BUTTON_HEIGHT],
-                        Self::toolbar_button("Clear", COLOR_CLEAR),
-                    )
-                    .clicked()
-                {
-                    self.clear_actions();
-                }
-            } else {
-                let button_spacing = ui.spacing().item_spacing.x;
-                let button_width = ((available_width - (button_spacing * 3.0)) / 4.0).max(0.0);
+                ToolbarLayout::Grid => {
+                    let item_spacing = ui.spacing().item_spacing;
+                    let button_width = ((available_width - item_spacing.x) / 2.0).max(0.0);
 
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_sized(
-                            [button_width, TOOLBAR_BUTTON_HEIGHT],
-                            Self::toolbar_button("Add Mouse Click", COLOR_MOUSE),
-                        )
-                        .clicked()
-                    {
-                        self.start_mouse_click_flow(ui.ctx());
-                    }
-                    if ui
-                        .add_sized(
-                            [button_width, TOOLBAR_BUTTON_HEIGHT],
-                            Self::toolbar_button("Add Keyboard Press", COLOR_KEYBOARD),
-                        )
-                        .clicked()
-                    {
-                        self.toggle_adding(AddingState::KeyPress);
-                    }
-                    if ui
-                        .add_sized(
-                            [button_width, TOOLBAR_BUTTON_HEIGHT],
-                            Self::toolbar_button("Add Delay", COLOR_DELAY),
-                        )
-                        .clicked()
-                    {
-                        self.toggle_adding(AddingState::Delay);
-                    }
-                    if ui
-                        .add_sized(
-                            [button_width, TOOLBAR_BUTTON_HEIGHT],
-                            Self::toolbar_button("Clear", COLOR_CLEAR),
-                        )
-                        .clicked()
-                    {
-                        self.clear_actions();
-                    }
-                });
+                    egui::Grid::new("toolbar_grid")
+                        .num_columns(2)
+                        .min_col_width(button_width)
+                        .spacing(item_spacing)
+                        .show(ui, |ui| {
+                            for (index, (icon, label, accent, state)) in
+                                actions.into_iter().enumerate()
+                            {
+                                if ui
+                                    .scope(|ui| {
+                                        Self::render_toolbar_button(
+                                            ui,
+                                            button_width,
+                                            icon,
+                                            label,
+                                            accent,
+                                        )
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
+                                    self.handle_toolbar_action(state, ui.ctx());
+                                }
+
+                                if index % 2 == 1 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                }
+                ToolbarLayout::Row => {
+                    let button_spacing = ui.spacing().item_spacing.x;
+                    let button_width = ((available_width - (button_spacing * 3.0)) / 4.0).max(0.0);
+
+                    ui.horizontal(|ui| {
+                        for (icon, label, accent, state) in actions {
+                            if ui
+                                .scope(|ui| {
+                                    Self::render_toolbar_button(
+                                        ui,
+                                        button_width,
+                                        icon,
+                                        label,
+                                        accent,
+                                    )
+                                })
+                                .inner
+                                .clicked()
+                            {
+                                self.handle_toolbar_action(state, ui.ctx());
+                            }
+                        }
+                    });
+                }
             }
         });
     }
@@ -740,7 +968,7 @@ impl App {
         let has_selected_position = self.selected_mouse_position.is_some();
 
         ui.group(|ui| {
-            ui.label("Mouse Click:");
+            Self::render_section_heading(ui, Icon::MouseClick, "Mouse Click", COLOR_MOUSE);
             ui.horizontal_wrapped(|ui| {
                 ui.radio_value(&mut self.mouse_button, MouseButton::Left, "Left");
                 ui.radio_value(&mut self.mouse_button, MouseButton::Right, "Right");
@@ -782,10 +1010,10 @@ impl App {
             ui.label(self.mouse_capture_hint());
 
             if ui
-                .add_enabled(
-                    has_selected_position,
-                    egui::Button::new("Add"),
-                )
+                .add_enabled_ui(has_selected_position, |ui| {
+                    Self::render_form_submit_button(ui, Icon::MouseClick, COLOR_MOUSE)
+                })
+                .inner
                 .clicked()
             {
                 self.try_add_mouse_click();
@@ -795,7 +1023,7 @@ impl App {
 
     fn render_key_press_form(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.label("Key Press:");
+            Self::render_section_heading(ui, Icon::Keyboard, "Key Press", COLOR_KEYBOARD);
             ui.horizontal_wrapped(|ui| {
                 let keys = ["1", "2", "3", "4", "5", "Space", "Enter", "Tab", "Esc"];
                 for key in &keys {
@@ -821,10 +1049,7 @@ impl App {
                 });
             }
 
-            if ui
-                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
-                .clicked()
-            {
+            if Self::render_form_submit_button(ui, Icon::Keyboard, COLOR_KEYBOARD).clicked() {
                 self.try_add_key_press();
             }
         });
@@ -832,7 +1057,7 @@ impl App {
 
     fn render_delay_form(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.label("Delay:");
+            Self::render_section_heading(ui, Icon::Delay, "Delay", COLOR_DELAY);
 
             if Self::form_stacks(ui.available_width()) {
                 ui.label("Milliseconds:");
@@ -864,17 +1089,14 @@ impl App {
                 }
             });
 
-            if ui
-                .add_sized([ui.available_width(), 0.0], egui::Button::new("Add"))
-                .clicked()
-            {
+            if Self::render_form_submit_button(ui, Icon::Delay, COLOR_DELAY).clicked() {
                 self.try_add_delay();
             }
         });
     }
 
     fn render_action_list(&mut self, ui: &mut egui::Ui, worker_active: bool) {
-        ui.label(egui::RichText::new("Loop Order:").strong().size(16.0));
+        Self::render_section_heading(ui, Icon::ActionList, "Loop Order", egui::Color32::WHITE);
 
         if self.actions.is_empty() {
             ui.label("No actions added yet.");
@@ -892,21 +1114,44 @@ impl App {
                     let label = egui::RichText::new(format!("{}. {}", i + 1, action))
                         .color(color)
                         .strong();
+                    let action_icon = Self::action_icon(action);
 
                     ui.group(|ui| {
                         if Self::action_row_stacks(ui.available_width()) {
-                            ui.add(egui::Label::new(label.clone()).wrap());
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add(icons::tinted(action_icon, IconSize::CompactControl, color));
+                                ui.add(egui::Label::new(label.clone()).wrap());
+                            });
 
                             if !worker_active {
                                 ui.horizontal_wrapped(|ui| {
-                                    if i > 0 && ui.small_button("^").clicked() {
+                                    if i > 0
+                                        && ui
+                                            .add(Self::action_control_button(
+                                                Icon::MoveUp,
+                                                egui::Color32::WHITE,
+                                            ))
+                                            .on_hover_text("Move up")
+                                            .clicked()
+                                    {
                                         to_move = Some((i, -1));
                                     }
-                                    if i < self.actions.len() - 1 && ui.small_button("v").clicked()
+                                    if i < self.actions.len() - 1
+                                        && ui
+                                            .add(Self::action_control_button(
+                                                Icon::MoveDown,
+                                                egui::Color32::WHITE,
+                                            ))
+                                            .on_hover_text("Move down")
+                                            .clicked()
                                     {
                                         to_move = Some((i, 1));
                                     }
-                                    if ui.small_button("X").clicked() {
+                                    if ui
+                                        .add(Self::action_control_button(Icon::Remove, COLOR_STOP))
+                                        .on_hover_text("Remove action")
+                                        .clicked()
+                                    {
                                         to_remove = Some(i);
                                     }
                                 });
@@ -919,24 +1164,53 @@ impl App {
                             };
 
                             ui.horizontal(|ui| {
-                                ui.add_sized(
-                                    [label_width, 0.0],
-                                    egui::Label::new(label.clone()).wrap(),
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(label_width, 0.0),
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.add(icons::tinted(
+                                            action_icon,
+                                            IconSize::CompactControl,
+                                            color,
+                                        ));
+                                        ui.add(egui::Label::new(label.clone()).wrap());
+                                    },
                                 );
 
                                 if !worker_active {
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
-                                            if ui.small_button("X").clicked() {
+                                            if ui
+                                                .add(Self::action_control_button(
+                                                    Icon::Remove,
+                                                    COLOR_STOP,
+                                                ))
+                                                .on_hover_text("Remove action")
+                                                .clicked()
+                                            {
                                                 to_remove = Some(i);
                                             }
                                             if i < self.actions.len() - 1
-                                                && ui.small_button("v").clicked()
+                                                && ui
+                                                    .add(Self::action_control_button(
+                                                        Icon::MoveDown,
+                                                        egui::Color32::WHITE,
+                                                    ))
+                                                    .on_hover_text("Move down")
+                                                    .clicked()
                                             {
                                                 to_move = Some((i, 1));
                                             }
-                                            if i > 0 && ui.small_button("^").clicked() {
+                                            if i > 0
+                                                && ui
+                                                    .add(Self::action_control_button(
+                                                        Icon::MoveUp,
+                                                        egui::Color32::WHITE,
+                                                    ))
+                                                    .on_hover_text("Move up")
+                                                    .clicked()
+                                            {
                                                 to_move = Some((i, -1));
                                             }
                                         },
@@ -958,7 +1232,7 @@ impl App {
 
     fn render_stop_configuration(&mut self, ui: &mut egui::Ui, worker_active: bool) {
         ui.add_enabled_ui(!worker_active, |ui| {
-            ui.label(egui::RichText::new("Stop Condition:").strong());
+            Self::render_section_heading(ui, Icon::Delay, "Stop Condition", COLOR_DELAY);
             let mut is_hotkey_only = self.stop_condition == StopCondition::HotkeyOnly;
 
             if ui
@@ -1082,12 +1356,12 @@ impl eframe::App for App {
 
                     if let Some(notice) = self.platform_notice() {
                         ui.separator();
-                        ui.colored_label(COLOR_INFO, notice);
+                        Self::render_message_row(ui, Icon::Notice, COLOR_INFO, notice);
                     }
 
                     if let Some(message) = &self.status_message {
                         ui.separator();
-                        ui.colored_label(COLOR_STATUS, message);
+                        Self::render_message_row(ui, Icon::Status, COLOR_STATUS, message);
                     }
 
                     ui.separator();
@@ -1095,13 +1369,17 @@ impl eframe::App for App {
                     // === Start/Stop Button ===
                     ui.vertical_centered(|ui| {
                         if is_running {
-                            if ui.add(Self::run_button("STOP", COLOR_STOP)).clicked() {
+                            if Self::render_run_button(ui, Icon::Stop, "STOP", COLOR_STOP).clicked()
+                            {
                                 self.stop_worker();
                             }
                         } else if is_stopping {
-                            ui.add_enabled(false, Self::run_button("Stopping...", COLOR_STOP));
+                            ui.add_enabled_ui(false, |ui| {
+                                Self::render_run_button(ui, Icon::Stop, "Stopping...", COLOR_STOP);
+                            });
                         } else if !self.actions.is_empty()
-                            && ui.add(Self::run_button("START", COLOR_START)).clicked()
+                            && Self::render_run_button(ui, Icon::Start, "START", COLOR_START)
+                                .clicked()
                         {
                             self.start_worker();
                         }

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.31"
+egui_extras = { version = "0.31.1", features = ["svg"] }
 enigo = { version = "0.3", default-features = false, features = ["wayland", "x11rb"] }
 global-hotkey = "0.6"
 rand = "0.8"
