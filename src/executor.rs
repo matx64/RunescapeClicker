@@ -1,7 +1,7 @@
 use crate::action::{Action, MouseButton, StopCondition};
 use crate::hotkey::connect_input_backend;
 use enigo::{Button, Coordinate, Direction, Key, Keyboard, Mouse};
-use rand::Rng;
+use rand::RngExt;
 use std::f64::consts::PI;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -96,7 +96,7 @@ struct RealRuntime {
 impl RealRuntime {
     fn new() -> Self {
         Self {
-            rng: rand::thread_rng(),
+            rng: rand::rng(),
             start: Instant::now(),
         }
     }
@@ -112,20 +112,21 @@ impl ExecutionRuntime for RealRuntime {
     }
 
     fn anti_detect_delay_ms(&mut self) -> u64 {
-        self.rng.gen_range(ANTI_DETECT_MIN_MS..=ANTI_DETECT_MAX_MS)
+        self.rng
+            .random_range(ANTI_DETECT_MIN_MS..=ANTI_DETECT_MAX_MS)
     }
 
     fn delay_jitter_ms(&mut self) -> u64 {
-        self.rng.gen_range(0..=DELAY_JITTER_MAX_MS)
+        self.rng.random_range(0..=DELAY_JITTER_MAX_MS)
     }
 
     fn movement_curve_factor(&mut self) -> f64 {
-        self.rng.gen_range(-1.0..=1.0)
+        self.rng.random_range(-1.0..=1.0)
     }
 
     fn post_move_click_delay_ms(&mut self) -> u64 {
         self.rng
-            .gen_range(POST_MOVE_CLICK_DELAY_MIN_MS..=POST_MOVE_CLICK_DELAY_MAX_MS)
+            .random_range(POST_MOVE_CLICK_DELAY_MIN_MS..=POST_MOVE_CLICK_DELAY_MAX_MS)
     }
 
     fn elapsed(&self) -> Duration {

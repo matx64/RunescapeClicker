@@ -730,12 +730,13 @@ impl App {
         }
     }
 
-    fn render_mouse_capture_picker(&mut self, ctx: &egui::Context) {
+    fn render_mouse_capture_picker(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
         let cancel_requested = ctx.input(|input| {
             input.key_pressed(egui::Key::Escape) || input.viewport().close_requested()
         });
         if cancel_requested {
-            self.cancel_mouse_capture_picker(ctx);
+            self.cancel_mouse_capture_picker(&ctx);
             return;
         }
 
@@ -753,17 +754,17 @@ impl App {
             })
         };
         if let Some(pos) = captured_pos {
-            self.complete_mouse_capture_picker(ctx, pos);
+            self.complete_mouse_capture_picker(&ctx, pos);
             return;
         }
 
         let pointer_pos = ctx.input(|input| input.pointer.latest_pos());
-        let preview = pointer_pos.map(|pos| Self::picker_pos_to_pixels(ctx, pos));
+        let preview = pointer_pos.map(|pos| Self::picker_pos_to_pixels(&ctx, pos));
         ctx.request_repaint_after(Duration::from_millis(16));
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 let rect = ui.max_rect();
                 let painter = ui.painter();
 
@@ -789,7 +790,7 @@ impl App {
 
         egui::Area::new(egui::Id::new("mouse_capture_picker_hud"))
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 24.0))
-            .show(ctx, |ui| {
+            .show(&ctx, |ui| {
                 egui::Frame::new()
                     .fill(egui::Color32::from_rgba_unmultiplied(8, 12, 18, 220))
                     .stroke(egui::Stroke::new(1.0, COLOR_MOUSE.gamma_multiply(0.8)))
@@ -1299,7 +1300,7 @@ impl eframe::App for App {
         egui::Color32::TRANSPARENT.to_normalized_gamma_f32()
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Poll hotkeys
         let direct_capture_enabled = self.can_capture_mouse_position_direct();
         if let Some(hotkey_manager) = &self.hotkey_manager {
@@ -1318,19 +1319,20 @@ impl eframe::App for App {
         self.handle_focused_hotkeys(ctx, self.worker_active());
         self.apply_pending_direct_capture();
 
-        let is_running = self.running.load(Ordering::Acquire);
-        let worker_active = self.worker_active();
-        let is_stopping = worker_active && !is_running;
-
         // Request repaint to keep polling hotkeys
         ctx.request_repaint_after(Duration::from_millis(100));
+    }
 
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if self.mouse_capture_picker.is_some() {
-            self.render_mouse_capture_picker(ctx);
+            self.render_mouse_capture_picker(ui);
             return;
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        let worker_active = self.worker_active();
+        let is_running = self.running.load(Ordering::Acquire);
+        let is_stopping = worker_active && !is_running;
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
