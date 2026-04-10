@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="RunescapeClicker.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="32">
+        <StackPanel Spacing="12">
+            <TextBlock Text="Runescape Clicker Native Bootstrap"
+                       Style="{ThemeResource TitleLargeTextBlockStyle}" />
+            <TextBlock Text="Phase 1 scaffolding is in place. Core behavior ports start in Phase 2."
+                       TextWrapping="WrapWholeWords" />
+            <TextBlock x:Name="StatusText"
+                       TextWrapping="WrapWholeWords" />
+        </StackPanel>
+    </Grid>
+</Window>

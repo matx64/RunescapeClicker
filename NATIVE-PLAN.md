@@ -3,7 +3,8 @@
 **Summary**
 - Rewrite the app as a Windows-only native desktop application in C# with WinUI 3, with a clean-break .NET solution and no Linux compatibility work.
 - Follow an execution-first migration: extract the automation engine into a testable C# core before any UI rebuild, then rebuild the interface entirely with native WinUI 3 controls.
-- Ground truth today: `[src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/tests/executor_integration.rs)`).
+- Ground truth today: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`).
+- Current migration status: Phase 0 and Phase 1 are complete as of April 10, 2026. The repo now contains a validated native bootstrap at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
 
 **Target Architecture And Public Interfaces**
 - New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, and `RunescapeClicker.App.Tests`.
@@ -14,24 +15,55 @@
 - `RunescapeClicker.Automation.Windows` implements `IInputAdapter`, `IHotkeyService`, and `ICoordinatePickerService` with Win32 interop; no WinUI types are allowed in this layer.
 - `RunescapeClicker.App` is MVVM-only and depends on the abstractions above; all WinUI pages and view models consume immutable snapshots from the core.
 
-**Phase 0: Freeze The Rust App As Reference**
-1. Capture the current behavioral contract from `[src/action.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/action.rs)`, `[src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/executor.rs)`, `[src/hotkey.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/hotkey.rs)`, README, and existing tests.
-2. Mark as preserved for v1: three action types, continuous loop execution, stop-by-timer or global stop hotkey, surfaced execution errors, coordinate-based mouse clicks, and action reordering/removal.
-3. Mark as intentionally dropped: Linux/Wayland/X11 paths, focused-only hotkey mode, Linux overlay fallback logic, egui-specific custom rendering, and raw text key entry.
-4. Write a migration acceptance matrix that maps every Rust executor test to a future C# test and every app workflow to a WinUI replacement.
+**Execution Status**
+- Phase 0: Completed on April 10, 2026.
+- Phase 1: Completed on April 10, 2026.
+- Phase 2: Pending.
+- Phase 3: Pending.
+- Phase 4: Pending.
+- Phase 5: Pending.
+- Phase 6: Pending.
 
-**Phase 1: Bootstrap The New Windows Solution**
-1. Create a fresh `/native` .NET solution targeting `net10.0-windows` with WinUI 3 on the latest stable Windows App SDK as of April 10, 2026: `1.8.6`; do not build v1 on `2.0 Preview 2`.
-2. Make the app unpackaged, x64-only, self-contained for release builds, and optimized for currently supported Windows 11 desktop releases only.
-3. Add `CommunityToolkit.Mvvm` for state/commands, `Microsoft.Windows.CsWin32` for P/Invoke generation, `xUnit` plus `FluentAssertions` for tests, and a central `Directory.Build.props` for shared warnings/analyzers.
-4. Keep the Rust project read-only during development as a reference artifact only; no Rust-to-C# bridge and no mixed-runtime shipping plan.
+**Phase 0: Freeze The Rust App As Reference (Completed April 10, 2026)**
+1. [x] Capture the current behavioral contract from `[old-version/src/action.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/action.rs)`, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)`, `[old-version/src/hotkey.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/hotkey.rs)`, README, and existing tests.
+2. [x] Mark as preserved for v1: three action types, continuous loop execution, stop-by-timer or global stop hotkey, surfaced execution errors, coordinate-based mouse clicks, and action reordering/removal.
+3. [x] Mark as intentionally dropped: Linux/Wayland/X11 paths, focused-only hotkey mode, Linux overlay fallback logic, egui-specific custom rendering, and raw text key entry.
+4. [x] Write a migration acceptance matrix that maps every Rust executor test to a future C# test and every app workflow to a WinUI replacement.
+
+**Phase 0 Completion Notes**
+- The frozen migration baseline is documented in `[PHASE-0-REFERENCE.md](C:/Users/mathe/Documents/dev/RunescapeClicker/PHASE-0-REFERENCE.md)`.
+- The Rust-to-C# contract mapping is documented in `[PHASE-0-ACCEPTANCE-MATRIX.md](C:/Users/mathe/Documents/dev/RunescapeClicker/PHASE-0-ACCEPTANCE-MATRIX.md)`.
+- The Rust app remains read-only in `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)`.
+- `cargo test` in `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` passed on April 10, 2026 with `61/61` tests green.
+
+**Phase 1: Bootstrap The New Windows Solution (Completed April 10, 2026)**
+1. [x] Create a fresh `/native` .NET solution targeting `net10.0-windows` with WinUI 3 on the latest stable Windows App SDK as of April 10, 2026: `1.8.6`; do not build v1 on `2.0 Preview 2`.
+2. [x] Make the app unpackaged, x64-only, self-contained for release builds, and optimized for currently supported Windows 11 desktop releases only.
+3. [x] Add `CommunityToolkit.Mvvm` for state/commands, `Microsoft.Windows.CsWin32` for P/Invoke generation, `xUnit` plus `FluentAssertions` for tests, and a central `Directory.Build.props` for shared warnings/analyzers.
+4. [x] Keep the Rust project read-only during development as a reference artifact only; no Rust-to-C# bridge and no mixed-runtime shipping plan.
+
+**Phase 1 Completion Notes**
+- The native bootstrap solution now exists at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)`.
+- Implemented projects:
+  - `[native/src/RunescapeClicker.Core](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Core)`
+  - `[native/src/RunescapeClicker.Automation.Windows](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Automation.Windows)`
+  - `[native/src/RunescapeClicker.App](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App)`
+  - `[native/tests/RunescapeClicker.Core.Tests](C:/Users/mathe/Documents/dev/RunescapeClicker/native/tests/RunescapeClicker.Core.Tests)`
+  - `[native/tests/RunescapeClicker.App.Tests](C:/Users/mathe/Documents/dev/RunescapeClicker/native/tests/RunescapeClicker.App.Tests)`
+- Shared build/analyzer defaults now live in `[native/Directory.Build.props](C:/Users/mathe/Documents/dev/RunescapeClicker/native/Directory.Build.props)`.
+- The unpackaged WinUI app shell and release publish profile now live in `[native/src/RunescapeClicker.App/RunescapeClicker.App.csproj](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/RunescapeClicker.App.csproj)` and `[native/src/RunescapeClicker.App/Properties/PublishProfiles/win-x64.pubxml](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/Properties/PublishProfiles/win-x64.pubxml)`.
+- Native bootstrap instructions now live in `[native/README.md](C:/Users/mathe/Documents/dev/RunescapeClicker/native/README.md)`.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet build native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+  - `dotnet publish native/src/RunescapeClicker.App/RunescapeClicker.App.csproj -c Release -p:Platform=x64 -r win-x64 -p:PublishProfile=win-x64`
 
 **Phase 2: Extract And Rebuild The Execution Engine First**
 1. Port the executor concepts from Rust into `RunescapeClicker.Core`: cancellable sleep, looping sequence runner, stop conditions, structured failure reporting, and humanized mouse movement.
 2. Redesign timing behavior into an explicit `ExecutionProfile` instead of scattered constants so the engine can evolve without UI rewrites.
 3. Preserve action types but not Rust internals: keep mouse/key/delay semantics, while allowing a cleaner C# implementation of movement interpolation, jitter policy, and key normalization.
 4. Build fake `IInputAdapter` and fake time/random providers so the engine is fully testable without real mouse or keyboard injection.
-5. Port all executor coverage from `[tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/tests/executor_integration.rs)` to C#: backend failure, stop during delay, stop during movement, click failure after move, same-position click delay, empty sequence, and bounded mouse interpolation.
+5. Port all executor coverage from `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)` to C#: backend failure, stop during delay, stop during movement, click failure after move, same-position click delay, empty sequence, and bounded mouse interpolation.
 6. Exit criterion: the C# core passes the ported contract suite before any WinUI screen is treated as feature-complete.
 
 **Phase 3: Implement Windows-Native Automation Services**
@@ -79,7 +111,7 @@
 - No Linux code, no cross-platform abstractions beyond testable engine boundaries, and no attempt to preserve Wayland/X11 behaviors.
 
 **References**
-- Rust reference points: `[src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/app.rs)`, `[src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/src/executor.rs)`, `[tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/tests/executor_integration.rs)`.
+- Rust reference points: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)`, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)`, `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`.
 - Windows App SDK release policy: [Microsoft Learn](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-channels).
 - WinUI 3 desktop interop guidance: [Microsoft Learn](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/desktop-winui3-app-with-basic-interop).
 - .NET supported releases: [Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/core/releases-and-support).

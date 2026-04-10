@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.Core", "src\RunescapeClicker.Core\RunescapeClicker.Core.csproj", "{AC4A7978-A154-4192-8147-847E7D05FD2C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.Automation.Windows", "src\RunescapeClicker.Automation.Windows\RunescapeClicker.Automation.Windows.csproj", "{948F5B3C-21FC-4F2B-BA48-556AAE39297B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.App", "src\RunescapeClicker.App\RunescapeClicker.App.csproj", "{CAE549EA-F766-4F70-9B0E-8D591C94FB13}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.Core.Tests", "tests\RunescapeClicker.Core.Tests\RunescapeClicker.Core.Tests.csproj", "{ED85510C-F0E1-4F6E-961E-514C504375E9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.App.Tests", "tests\RunescapeClicker.App.Tests\RunescapeClicker.App.Tests.csproj", "{26CB0B48-C10F-457D-BBFE-6B7085A80960}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AC4A7978-A154-4192-8147-847E7D05FD2C}.Debug|x64.ActiveCfg = Debug|x64
+		{AC4A7978-A154-4192-8147-847E7D05FD2C}.Debug|x64.Build.0 = Debug|x64
+		{AC4A7978-A154-4192-8147-847E7D05FD2C}.Release|x64.ActiveCfg = Release|x64
+		{AC4A7978-A154-4192-8147-847E7D05FD2C}.Release|x64.Build.0 = Release|x64
+		{948F5B3C-21FC-4F2B-BA48-556AAE39297B}.Debug|x64.ActiveCfg = Debug|x64
+		{948F5B3C-21FC-4F2B-BA48-556AAE39297B}.Debug|x64.Build.0 = Debug|x64
+		{948F5B3C-21FC-4F2B-BA48-556AAE39297B}.Release|x64.ActiveCfg = Release|x64
+		{948F5B3C-21FC-4F2B-BA48-556AAE39297B}.Release|x64.Build.0 = Release|x64
+		{CAE549EA-F766-4F70-9B0E-8D591C94FB13}.Debug|x64.ActiveCfg = Debug|x64
+		{CAE549EA-F766-4F70-9B0E-8D591C94FB13}.Debug|x64.Build.0 = Debug|x64
+		{CAE549EA-F766-4F70-9B0E-8D591C94FB13}.Release|x64.ActiveCfg = Release|x64
+		{CAE549EA-F766-4F70-9B0E-8D591C94FB13}.Release|x64.Build.0 = Release|x64
+		{ED85510C-F0E1-4F6E-961E-514C504375E9}.Debug|x64.ActiveCfg = Debug|x64
+		{ED85510C-F0E1-4F6E-961E-514C504375E9}.Debug|x64.Build.0 = Debug|x64
+		{ED85510C-F0E1-4F6E-961E-514C504375E9}.Release|x64.ActiveCfg = Release|x64
+		{ED85510C-F0E1-4F6E-961E-514C504375E9}.Release|x64.Build.0 = Release|x64
+		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Debug|x64.ActiveCfg = Debug|x64
+		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Debug|x64.Build.0 = Debug|x64
+		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Release|x64.ActiveCfg = Release|x64
+		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{AC4A7978-A154-4192-8147-847E7D05FD2C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{948F5B3C-21FC-4F2B-BA48-556AAE39297B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{CAE549EA-F766-4F70-9B0E-8D591C94FB13} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{ED85510C-F0E1-4F6E-961E-514C504375E9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{26CB0B48-C10F-457D-BBFE-6B7085A80960} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+	EndGlobalSection
+EndGlobal
