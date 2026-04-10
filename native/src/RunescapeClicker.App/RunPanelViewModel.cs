@@ -63,6 +63,16 @@ public sealed class RunPanelViewModel : ObservableObject
         }
     }
 
+    public int StopModeIndex
+    {
+        get => _store.StopRuleMode == StopRuleMode.Timer ? 1 : 0;
+        set
+        {
+            SelectedStopMode = value == 1 ? StopRuleMode.Timer : StopRuleMode.HotkeyOnly;
+            OnPropertyChanged();
+        }
+    }
+
     public bool IsTimerStopEnabled => _store.IsTimerStopEnabled;
 
     public bool IsBusy => _store.RunInProgress;
@@ -82,6 +92,7 @@ public sealed class RunPanelViewModel : ObservableObject
         {
             case nameof(AppSessionStore.StopRuleMode):
                 OnPropertyChanged(nameof(SelectedStopMode));
+                OnPropertyChanged(nameof(StopModeIndex));
                 OnPropertyChanged(nameof(IsTimerStopEnabled));
                 break;
             case nameof(AppSessionStore.TimerSecondsText):

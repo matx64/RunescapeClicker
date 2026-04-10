@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
 using RunescapeClicker.Automation.Windows;
 using RunescapeClicker.Core;
+using Windows.System;
 
 namespace RunescapeClicker.App.Tests;
 
@@ -54,6 +55,61 @@ public sealed class Phase4AppLayerTests
 
         viewModel.ActionComposer.IsDelayDraftActive.Should().BeTrue();
         store.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BeginningKeyDraftArmsRealKeyboardCapture()
+    {
+        var store = CreateStore();
+        var viewModel = CreateMainViewModel(store);
+        store.SelectedKeyOption = new KeyOption("Space", 0x20, 0x39, false);
+
+        viewModel.ActionComposer.BeginAddKeyPressCommand.Execute(null);
+
+        viewModel.ActionComposer.IsKeyDraftActive.Should().BeTrue();
+        viewModel.ActionComposer.IsAwaitingKeyCapture.Should().BeTrue();
+        store.SelectedKeyOption.Should().BeNull();
+        viewModel.ActionComposer.ConfirmDraftCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CapturedKeyMetadataIsSavedIntoTheSequence()
+    {
+        var store = CreateStore();
+        var keyMetadata = new FakeKeyboardKeyMetadataService
+        {
+            Result = new NormalizedKeyboardKey("A", 0x41, 0x1E, false),
+        };
+        var viewModel = CreateMainViewModel(store, keyMetadataService: keyMetadata);
+
+        viewModel.ActionComposer.BeginAddKeyPressCommand.Execute(null);
+        viewModel.ActionComposer.TryCaptureKey(VirtualKey.A).Should().BeTrue();
+        viewModel.ActionComposer.ConfirmDraftCommand.Execute(null);
+
+        keyMetadata.RequestedKeys.Should().ContainSingle().Which.Should().Be(VirtualKey.A);
+        store.Actions.Should().ContainSingle();
+        store.Actions[0].Should().Be(new KeyPressAction(0x41, 0x1E, false, "A"));
+    }
+
+    [Fact]
+    public void EditingAKeyActionDoesNotCaptureUntilExplicitlyArmed()
+    {
+        var store = CreateStore();
+        store.Actions.Add(new KeyPressAction(0x20, 0x39, false, "Space"));
+        var keyMetadata = new FakeKeyboardKeyMetadataService
+        {
+            Result = new NormalizedKeyboardKey("A", 0x41, 0x1E, false),
+        };
+        var viewModel = CreateMainViewModel(store, keyMetadataService: keyMetadata);
+
+        viewModel.ActionList.EditAction(0);
+
+        viewModel.ActionComposer.TryCaptureKey(VirtualKey.A).Should().BeFalse();
+        viewModel.ActionComposer.SelectedKeyOption.Should().Be(new KeyOption("Space", 0x20, 0x39, false));
+
+        viewModel.ActionComposer.BeginKeyCaptureCommand.Execute(null);
+        viewModel.ActionComposer.TryCaptureKey(VirtualKey.A).Should().BeTrue();
+        viewModel.ActionComposer.SelectedKeyOption.Should().Be(new KeyOption("A", 0x41, 0x1E, false));
     }
 
     [Fact]
@@ -129,6 +185,39 @@ public sealed class Phase4AppLayerTests
 
         store.Actions[0].Should().Be(new DelayAction(TimeSpan.FromMilliseconds(450)));
         store.Actions[1].Should().Be(new DelayAction(TimeSpan.FromMilliseconds(100)));
+    }
+
+    [Fact]
+    public void DragDropCommitUpdatesTheSequenceAndKeepsTheEditedAction()
+    {
+        var store = CreateStore();
+        var viewModel = CreateMainViewModel(store);
+        store.Actions.Add(new DelayAction(TimeSpan.FromMilliseconds(100)));
+        store.Actions.Add(new DelayAction(TimeSpan.FromMilliseconds(200)));
+
+        viewModel.ActionList.EditAction(1);
+        viewModel.ActionList.Items.Move(1, 0);
+        viewModel.ActionList.CommitCurrentItemOrder();
+        viewModel.ActionComposer.DelayMillisecondsText = "450";
+        viewModel.ActionComposer.ConfirmDraftCommand.Execute(null);
+
+        store.Actions[0].Should().Be(new DelayAction(TimeSpan.FromMilliseconds(450)));
+        store.Actions[1].Should().Be(new DelayAction(TimeSpan.FromMilliseconds(100)));
+    }
+
+    [Fact]
+    public void RejectedDragDropRestoresTheVisibleSequenceOrder()
+    {
+        var store = CreateStore();
+        var viewModel = CreateMainViewModel(store);
+        store.Actions.Add(new DelayAction(TimeSpan.FromMilliseconds(100)));
+        store.Actions.Add(new DelayAction(TimeSpan.FromMilliseconds(200)));
+
+        viewModel.ActionList.Items.Move(1, 0);
+        store.RunInProgress = true;
+        viewModel.ActionList.CommitCurrentItemOrder();
+
+        viewModel.ActionList.Items.Select(item => item.Action).Should().Equal(store.Actions);
     }
 
     [Fact]
@@ -352,19 +441,22 @@ public sealed class Phase4AppLayerTests
     }
 
     [Fact]
-    public void AppEnvironmentSummaryMentionsThePhase4Harness()
+    public void AppEnvironmentSummaryMentionsThePhase5Shell()
     {
-        AppEnvironment.Summary.Should().Contain("Phase 4");
+        AppEnvironment.Summary.Should().Contain("Phase 5");
         AppEnvironment.Summary.Should().Contain("RunescapeClicker.Core");
         AppEnvironment.Summary.Should().Contain("RunescapeClicker.Automation.Windows");
+        AppEnvironment.Summary.Should().Contain("native Windows key capture");
     }
 
     private static AppSessionStore CreateStore() => new();
 
-    private static MainViewModel CreateMainViewModel(AppSessionStore? store = null)
+    private static MainViewModel CreateMainViewModel(
+        AppSessionStore? store = null,
+        IKeyboardKeyMetadataService? keyMetadataService = null)
     {
         var sessionStore = store ?? CreateStore();
-        return new MainViewModel(sessionStore, CreateCoordinator(sessionStore));
+        return new MainViewModel(sessionStore, CreateCoordinator(sessionStore), keyMetadataService);
     }
 
     private static RunCoordinator CreateCoordinator(
@@ -495,6 +587,22 @@ public sealed class Phase4AppLayerTests
         {
             Delays.Add(delay);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeKeyboardKeyMetadataService : IKeyboardKeyMetadataService
+    {
+        public bool ShouldSucceed { get; init; } = true;
+
+        public NormalizedKeyboardKey Result { get; init; } = new("Space", 0x20, 0x39, false);
+
+        public List<VirtualKey> RequestedKeys { get; } = [];
+
+        public bool TryCreate(VirtualKey key, out NormalizedKeyboardKey metadata)
+        {
+            RequestedKeys.Add(key);
+            metadata = Result;
+            return ShouldSucceed;
         }
     }
 }

@@ -38,7 +38,9 @@ public sealed class AppComposition : IDisposable
             new ContentDialogMouseSmokePrompt(dispatcherQueue, xamlRootProvider),
             new SystemAsyncDelayScheduler());
 
-        return new AppComposition(automationServices, new MainViewModel(store, coordinator));
+        return new AppComposition(
+            automationServices,
+            new MainViewModel(store, coordinator, new KeyboardKeyMetadataService()));
     }
 
     public void Dispose()

@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:local="using:RunescapeClicker.App"
+    xmlns:sys="using:System"
     mc:Ignorable="d">
 
     <Window.SystemBackdrop>
@@ -13,35 +13,85 @@
     </Window.SystemBackdrop>
 
     <ScrollViewer>
-        <Grid Padding="28"
-              RowSpacing="20"
-              ColumnSpacing="20">
+        <Grid Padding="24"
+              RowSpacing="16">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel Spacing="12">
-                <TextBlock Text="Runescape Clicker Phase 4 Harness"
+            <StackPanel Spacing="6">
+                <TextBlock Text="Runescape Clicker"
                            Style="{ThemeResource TitleLargeTextBlockStyle}" />
                 <TextBlock Text="{Binding SummaryText}"
                            TextWrapping="WrapWholeWords" />
                 <TextBlock Text="{Binding CurrentState}"
                            FontWeight="SemiBold" />
-                <InfoBar IsOpen="{Binding Status.IsStatusOpen}"
-                         Severity="{Binding Status.StatusSeverity}"
-                         IsClosable="False"
-                         Message="{Binding Status.StatusMessage}" />
             </StackPanel>
 
-            <Grid Grid.Row="1"
-                  ColumnSpacing="20">
+            <InfoBar Grid.Row="1"
+                     IsOpen="{Binding Status.IsStatusOpen}"
+                     Severity="{Binding Status.StatusSeverity}"
+                     IsClosable="False"
+                     Message="{Binding Status.StatusMessage}" />
+
+            <CommandBar Grid.Row="2"
+                        DefaultLabelPosition="Right"
+                        IsDynamicOverflowEnabled="True">
+                <AppBarButton Label="Mouse Click"
+                              Command="{Binding ActionComposer.BeginAddMouseClickCommand}">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Add" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton Label="Key Press"
+                              Command="{Binding ActionComposer.BeginAddKeyPressCommand}">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Edit" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton Label="Delay"
+                              Command="{Binding ActionComposer.BeginAddDelayCommand}">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Preview" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator />
+                <AppBarButton Label="Clear Sequence"
+                              Command="{Binding ActionList.ClearActionsCommand}">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Delete" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <CommandBar.SecondaryCommands>
+                    <AppBarButton Label="Retry Hotkeys"
+                                  Command="{Binding RetryHotkeysCommand}">
+                        <AppBarButton.Icon>
+                            <SymbolIcon Symbol="Refresh" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar.SecondaryCommands>
+            </CommandBar>
+
+            <Grid Grid.Row="3"
+                  x:Name="WorkspaceGrid"
+                  RowSpacing="16"
+                  ColumnSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="LeftPaneColumn"
+                                      Width="*" />
+                    <ColumnDefinition x:Name="RightPaneColumn"
+                                      Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0"
+                <StackPanel Grid.Row="0"
+                            Grid.Column="0"
                             Spacing="16">
                     <Border Padding="16"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -49,14 +99,202 @@
                             BorderThickness="1"
                             CornerRadius="12">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Automation Services"
+                            <TextBlock Text="Automation Status"
                                        Style="{ThemeResource TitleMediumTextBlockStyle}" />
                             <TextBlock Text="{Binding Status.HotkeyStatusText}"
                                        TextWrapping="WrapWholeWords" />
                             <TextBlock Text="{Binding Status.LastHotkeyText}"
-                                       TextWrapping="WrapWholeWords" />
-                            <Button Content="Retry Hotkeys"
-                                    Command="{Binding RetryHotkeysCommand}" />
+                                       TextWrapping="WrapWholeWords"
+                                       Opacity="0.75" />
+                            <TextBlock Text="F1 captures the current cursor while a mouse action draft is open. F2 stops an active run."
+                                       TextWrapping="WrapWholeWords"
+                                       Opacity="0.75" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Action Composer"
+                                           Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                                <TextBlock Text="{Binding ActionComposer.DraftTitle}"
+                                           FontWeight="SemiBold"
+                                           Visibility="{Binding ActionComposer.IsDraftOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <TextBlock Text="Choose an action type from the command bar, then confirm it into the ordered sequence."
+                                           TextWrapping="WrapWholeWords"
+                                           Opacity="0.75" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1"
+                                        Spacing="14">
+                                <StackPanel Spacing="10"
+                                            Visibility="{Binding ActionComposer.IsMouseDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ComboBox Header="Mouse Button"
+                                              ItemsSource="{Binding ActionComposer.MouseButtonOptions}"
+                                              SelectedItem="{Binding ActionComposer.SelectedMouseButton, Mode=TwoWay}" />
+                                    <Border Padding="12"
+                                            CornerRadius="8"
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Selected Point"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Status.PickedCoordinateText}"
+                                                       TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Content="Capture Current Cursor (F1)"
+                                                Command="{Binding ActionComposer.CaptureCurrentCursorCommand}"
+                                                ToolTipService.ToolTip="Use the live cursor position without opening the picker." />
+                                        <Button Content="Pick On Screen"
+                                                Command="{Binding ActionComposer.PickOnScreenCommand}"
+                                                ToolTipService.ToolTip="Open the full-screen picker and click the destination point." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Content="{Binding ActionComposer.ConfirmDraftText}"
+                                                Command="{Binding ActionComposer.ConfirmDraftCommand}" />
+                                        <Button Content="Cancel"
+                                                Command="{Binding ActionComposer.CancelDraftCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel Spacing="10"
+                                            Visibility="{Binding ActionComposer.IsKeyDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Border x:Name="KeyCaptureAnchor"
+                                            Padding="12"
+                                            CornerRadius="8"
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="Captured Key"
+                                                       FontWeight="SemiBold" />
+                                            <TextBox IsReadOnly="True"
+                                                     Text="{Binding ActionComposer.CapturedKeyText}" />
+                                            <TextBlock Text="{Binding ActionComposer.KeyCaptureHintText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Opacity="0.75" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button x:Name="CaptureKeyButton"
+                                                Content="Capture Key"
+                                                Command="{Binding ActionComposer.BeginKeyCaptureCommand}"
+                                                ToolTipService.ToolTip="After clicking this button, press the key you want to store." />
+                                        <Button Content="Clear"
+                                                Command="{Binding ActionComposer.ClearCapturedKeyCommand}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Content="{Binding ActionComposer.ConfirmDraftText}"
+                                                Command="{Binding ActionComposer.ConfirmDraftCommand}" />
+                                        <Button Content="Cancel"
+                                                Command="{Binding ActionComposer.CancelDraftCommand}" />
+                                    </StackPanel>
+                                    <TeachingTip Target="{Binding ElementName=CaptureKeyButton}"
+                                                 Title="Press a key now"
+                                                 Subtitle="The next key press in this window will be captured with Windows virtual-key and scan-code metadata."
+                                                 IsOpen="{Binding ActionComposer.IsAwaitingKeyCapture}"
+                                                 IsLightDismissEnabled="False"
+                                                 PreferredPlacement="Bottom" />
+                                </StackPanel>
+
+                                <StackPanel Spacing="10"
+                                            Visibility="{Binding ActionComposer.IsDelayDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <NumberBox Header="Delay (ms)"
+                                               SmallChange="100"
+                                               Minimum="0"
+                                               SpinButtonPlacementMode="Compact"
+                                               Text="{Binding ActionComposer.DelayMillisecondsText, Mode=TwoWay}" />
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Content="{Binding ActionComposer.ConfirmDraftText}"
+                                                Command="{Binding ActionComposer.ConfirmDraftCommand}" />
+                                        <Button Content="Cancel"
+                                                Command="{Binding ActionComposer.CancelDraftCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="RightPaneStack"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Spacing="16">
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Sequence"
+                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                            <TextBlock Text="Drag items to reorder them. Editing and reordering are disabled while a run is active."
+                                       TextWrapping="WrapWholeWords"
+                                       Opacity="0.75" />
+                            <TextBlock Text="No actions yet. Use the command bar to add a mouse click, key press, or delay."
+                                       TextWrapping="WrapWholeWords"
+                                       Visibility="{Binding ActionList.ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ListView ItemsSource="{Binding ActionList.Items}"
+                                      AllowDrop="True"
+                                      CanDragItems="{Binding ActionList.CanModifyActions}"
+                                      CanReorderItems="{Binding ActionList.CanModifyActions}"
+                                      DragItemsCompleted="OnSequenceDragItemsCompleted"
+                                      Visibility="{Binding ActionList.HasActions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,8"
+                                                Padding="12"
+                                                CornerRadius="10"
+                                                BorderThickness="1"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <FontIcon Glyph="&#xE8C8;"
+                                                          VerticalAlignment="Top"
+                                                          Opacity="0.7" />
+                                                <StackPanel Grid.Column="1"
+                                                            Spacing="2">
+                                                    <TextBlock Text="{Binding DisplayIndex}"
+                                                               FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Summary}"
+                                                               TextWrapping="WrapWholeWords" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Command="{Binding EditCommand}"
+                                                        ToolTipService.ToolTip="Edit this action">
+                                                    <SymbolIcon Symbol="Edit" />
+                                                </Button>
+                                                <Button Grid.Column="3"
+                                                        Command="{Binding DeleteCommand}"
+                                                        ToolTipService.ToolTip="Remove this action">
+                                                    <SymbolIcon Symbol="Delete" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
                         </StackPanel>
                     </Border>
 
@@ -66,74 +304,18 @@
                             BorderThickness="1"
                             CornerRadius="12">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="Action Composer"
+                            <TextBlock Text="Run Configuration"
                                        Style="{ThemeResource TitleMediumTextBlockStyle}" />
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="8">
-                                <Button Content="Add Mouse Click"
-                                        Command="{Binding ActionComposer.BeginAddMouseClickCommand}" />
-                                <Button Content="Add Key Press"
-                                        Command="{Binding ActionComposer.BeginAddKeyPressCommand}" />
-                                <Button Content="Add Delay"
-                                        Command="{Binding ActionComposer.BeginAddDelayCommand}" />
-                            </StackPanel>
-
-                            <StackPanel Visibility="{Binding ActionComposer.IsMouseDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Spacing="8">
-                                <TextBlock Text="{Binding ActionComposer.DraftTitle}"
-                                           FontWeight="SemiBold" />
-                                <ComboBox Header="Mouse Button"
-                                          ItemsSource="{Binding ActionComposer.MouseButtonOptions}"
-                                          SelectedItem="{Binding ActionComposer.SelectedMouseButton, Mode=TwoWay}" />
-                                <TextBlock Text="{Binding Status.PickedCoordinateText}"
-                                           TextWrapping="WrapWholeWords" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="8">
-                                    <Button Content="Capture Current Cursor (F1)"
-                                            Command="{Binding ActionComposer.CaptureCurrentCursorCommand}" />
-                                    <Button Content="Pick On Screen"
-                                            Command="{Binding ActionComposer.PickOnScreenCommand}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="8">
-                                    <Button Content="{Binding ActionComposer.ConfirmDraftText}"
-                                            Command="{Binding ActionComposer.ConfirmDraftCommand}" />
-                                    <Button Content="Cancel"
-                                            Command="{Binding ActionComposer.CancelDraftCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Visibility="{Binding ActionComposer.IsKeyDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Spacing="8">
-                                <TextBlock Text="{Binding ActionComposer.DraftTitle}"
-                                           FontWeight="SemiBold" />
-                                <ComboBox Header="Key"
-                                          ItemsSource="{Binding ActionComposer.AvailableKeys}"
-                                          DisplayMemberPath="DisplayLabel"
-                                          SelectedItem="{Binding ActionComposer.SelectedKeyOption, Mode=TwoWay}" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="8">
-                                    <Button Content="{Binding ActionComposer.ConfirmDraftText}"
-                                            Command="{Binding ActionComposer.ConfirmDraftCommand}" />
-                                    <Button Content="Cancel"
-                                            Command="{Binding ActionComposer.CancelDraftCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Visibility="{Binding ActionComposer.IsDelayDraftActive, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Spacing="8">
-                                <TextBlock Text="{Binding ActionComposer.DraftTitle}"
-                                           FontWeight="SemiBold" />
-                                <TextBox Header="Delay (ms)"
-                                         Text="{Binding ActionComposer.DelayMillisecondsText, Mode=TwoWay}" />
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="8">
-                                    <Button Content="{Binding ActionComposer.ConfirmDraftText}"
-                                            Command="{Binding ActionComposer.ConfirmDraftCommand}" />
-                                    <Button Content="Cancel"
-                                            Command="{Binding ActionComposer.CancelDraftCommand}" />
-                                </StackPanel>
-                            </StackPanel>
+                            <RadioButtons SelectedIndex="{Binding RunPanel.StopModeIndex, Mode=TwoWay}">
+                                <sys:String>Stop on F2 only</sys:String>
+                                <sys:String>Stop after timer</sys:String>
+                            </RadioButtons>
+                            <NumberBox Header="Timer (seconds)"
+                                       Minimum="1"
+                                       SmallChange="5"
+                                       SpinButtonPlacementMode="Compact"
+                                       IsEnabled="{Binding RunPanel.IsTimerStopEnabled}"
+                                       Text="{Binding RunPanel.TimerSecondsText, Mode=TwoWay}" />
                         </StackPanel>
                     </Border>
 
@@ -142,81 +324,34 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Sequence"
-                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
-                            <ListView ItemsSource="{Binding ActionList.Items}"
-                                      Height="260">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid ColumnSpacing="8"
-                                              Padding="0,6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-
-                                            <TextBlock Text="{Binding DisplayIndex}"
-                                                       VerticalAlignment="Center"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Summary}"
-                                                       TextWrapping="WrapWholeWords"
-                                                       VerticalAlignment="Center" />
-                                            <Button Grid.Column="2"
-                                                    Content="Edit"
-                                                    Command="{Binding EditCommand}" />
-                                            <Button Grid.Column="3"
-                                                    Content="Delete"
-                                                    Command="{Binding DeleteCommand}" />
-                                            <Button Grid.Column="4"
-                                                    Content="Up"
-                                                    Command="{Binding MoveUpCommand}" />
-                                            <Button Grid.Column="5"
-                                                    Content="Down"
-                                                    Command="{Binding MoveDownCommand}" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                            <Button Content="Clear Actions"
-                                    Command="{Binding ActionList.ClearActionsCommand}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1"
-                            Spacing="16">
-                    <Border Padding="16"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="12">
-                        <StackPanel Spacing="8">
+                        <StackPanel Spacing="12">
                             <TextBlock Text="Run Controls"
                                        Style="{ThemeResource TitleMediumTextBlockStyle}" />
-                            <TextBlock Text="{Binding Status.RunStatusText}"
-                                       TextWrapping="WrapWholeWords" />
-                            <ComboBox Header="Stop Rule"
-                                      ItemsSource="{Binding RunPanel.StopModeOptions}"
-                                      SelectedItem="{Binding RunPanel.SelectedStopMode, Mode=TwoWay}" />
-                            <TextBox Header="Timer (seconds)"
-                                     IsEnabled="{Binding RunPanel.IsTimerStopEnabled}"
-                                     Text="{Binding RunPanel.TimerSecondsText, Mode=TwoWay}" />
-                            <ProgressRing Width="28"
-                                          Height="28"
-                                          IsActive="{Binding RunPanel.IsBusy}" />
                             <StackPanel Orientation="Horizontal"
-                                        Spacing="8">
-                                <Button Content="Start Session Run"
-                                        Command="{Binding RunPanel.StartRunCommand}" />
-                                <Button Content="Stop Run (F2)"
-                                        Command="{Binding RunPanel.StopRunCommand}" />
+                                        Spacing="10">
+                                <ProgressRing Width="24"
+                                              Height="24"
+                                              IsActive="{Binding RunPanel.IsBusy}" />
+                                <TextBlock Text="{Binding Status.RunStatusText}"
+                                           TextWrapping="WrapWholeWords"
+                                           VerticalAlignment="Center" />
                             </StackPanel>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        MinHeight="48"
+                                        Command="{Binding RunPanel.StartRunCommand}"
+                                        Content="Start Session Run"
+                                        ToolTipService.ToolTip="Begin the configured sequence with the selected stop rule." />
+                                <Button Grid.Column="1"
+                                        MinHeight="48"
+                                        Command="{Binding RunPanel.StopRunCommand}"
+                                        Content="Stop Run (F2)"
+                                        ToolTipService.ToolTip="Request a stop immediately, or press F2 globally." />
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -225,11 +360,12 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Manual Smoke"
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Validation"
                                        Style="{ThemeResource TitleMediumTextBlockStyle}" />
-                            <TextBlock Text="The Phase 3 smoke actions remain available while Phase 4 moves state and execution behind view models."
-                                       TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="The safe F24 smoke run and the opt-in mouse smoke run stay available for local Windows validation."
+                                       TextWrapping="WrapWholeWords"
+                                       Opacity="0.75" />
                             <Button Content="Start Safe F24 Smoke"
                                     Command="{Binding RunPanel.StartSafeSmokeCommand}" />
                             <Button Content="Run Opt-In Mouse Smoke"
@@ -245,10 +381,10 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="Live Log"
                                        Style="{ThemeResource TitleMediumTextBlockStyle}" />
-                            <TextBox Height="320"
+                            <TextBox MinHeight="220"
                                      IsReadOnly="True"
-                                     TextWrapping="Wrap"
                                      AcceptsReturn="True"
+                                     TextWrapping="Wrap"
                                      Text="{Binding Status.LogText}" />
                         </StackPanel>
                     </Border>

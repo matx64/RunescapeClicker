@@ -21,7 +21,7 @@
 - Phase 2: Completed on April 10, 2026.
 - Phase 3: Completed on April 10, 2026.
 - Phase 4: Completed on April 10, 2026.
-- Phase 5: Pending.
+- Phase 5: Completed on April 10, 2026.
 - Phase 6: Pending.
 
 **Phase 0: Freeze The Rust App As Reference (Completed April 10, 2026)**
@@ -108,14 +108,24 @@
   - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
 - Manual smoke execution remains a required local follow-up because real app launch, hotkey registration, overlay capture, and injected input were not exercised in automated tests during this session.
 
-**Phase 5: Rebuild The UI From Scratch In WinUI 3**
-1. Replace the egui single-surface UI with a WinUI 3 single-window shell using stock controls only: `CommandBar`, `ComboBox`, `RadioButtons`, `NumberBox`, `AutoSuggestBox` or captured key field, `ListView`, `InfoBar`, `ContentDialog`, `ToolTip`, `TeachingTip`, and `ProgressRing`.
-2. Use a two-pane adaptive layout: left pane for action composition and editing, right pane for ordered sequence, stop rule configuration, and run controls; collapse into a stacked mobile-style layout below the chosen width breakpoint.
-3. Mouse click flow: choose left/right button, capture coordinate via `F1` or “Pick on screen,” preview the selected point, then confirm the action.
-4. Key press flow: capture a real key from the keyboard and store normalized Windows key metadata; do not use raw lowercase string entry in the new UI.
-5. Sequence management: `ListView` with drag-and-drop reorder, inline action summaries, edit/remove affordances, and disabled editing while a run is active.
-6. Run experience: large native Start/Stop controls, stop rule selector, timer `NumberBox`, live status `InfoBar`, and clear hotkey hints.
-7. Visual direction: native Windows styling first, Segoe Fluent icons or `SymbolIcon`, system theme/high-contrast support, high-DPI correctness, and no custom-painted icon system in v1.
+**Phase 5: Rebuild The UI From Scratch In WinUI 3 (Completed April 10, 2026)**
+1. [x] Replace the egui single-surface UI with a WinUI 3 single-window shell using stock controls only: `CommandBar`, `ComboBox`, `RadioButtons`, `NumberBox`, `AutoSuggestBox` or captured key field, `ListView`, `InfoBar`, `ContentDialog`, `ToolTip`, `TeachingTip`, and `ProgressRing`.
+2. [x] Use a two-pane adaptive layout: left pane for action composition and editing, right pane for ordered sequence, stop rule configuration, and run controls; collapse into a stacked mobile-style layout below the chosen width breakpoint.
+3. [x] Mouse click flow: choose left/right button, capture coordinate via `F1` or “Pick on screen,” preview the selected point, then confirm the action.
+4. [x] Key press flow: capture a real key from the keyboard and store normalized Windows key metadata; do not use raw lowercase string entry in the new UI.
+5. [x] Sequence management: `ListView` with drag-and-drop reorder, inline action summaries, edit/remove affordances, and disabled editing while a run is active.
+6. [x] Run experience: large native Start/Stop controls, stop rule selector, timer `NumberBox`, live status `InfoBar`, and clear hotkey hints.
+7. [x] Visual direction: native Windows styling first, Segoe Fluent icons or `SymbolIcon`, system theme/high-contrast support, high-DPI correctness, and no custom-painted icon system in v1.
+
+**Phase 5 Completion Notes**
+- `[native/src/RunescapeClicker.App/MainWindow.xaml](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml)` and `[native/src/RunescapeClicker.App/MainWindow.xaml.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml.cs)` now provide the Phase 5 WinUI shell with a `CommandBar`, adaptive two-pane layout, action-composer pane, drag-and-drop `ListView` sequence pane, run controls, validation tools, `InfoBar` status, `TeachingTip` guidance, and live log output.
+- `[native/src/RunescapeClicker.App/ActionComposerViewModel.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/ActionComposerViewModel.cs)`, `[native/src/RunescapeClicker.App/ActionListViewModel.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/ActionListViewModel.cs)`, `[native/src/RunescapeClicker.App/RunPanelViewModel.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/RunPanelViewModel.cs)`, `[native/src/RunescapeClicker.App/MainViewModel.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainViewModel.cs)`, and `[native/src/RunescapeClicker.App/AppSessionStore.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/AppSessionStore.cs)` now model real keyboard-capture state, drag-drop commit handling, adaptive stop-rule selection, and editing lockouts while a run is active.
+- `[native/src/RunescapeClicker.Automation.Windows/IKeyboardKeyMetadataService.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Automation.Windows/IKeyboardKeyMetadataService.cs)` and `[native/src/RunescapeClicker.Automation.Windows/KeyboardKeyMetadataService.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Automation.Windows/KeyboardKeyMetadataService.cs)` now normalize captured Windows keys into virtual-key, scan-code, extended-key, and display-label metadata for Phase 5 key press actions.
+- `[native/tests/RunescapeClicker.App.Tests/Phase4AppLayerTests.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/tests/RunescapeClicker.App.Tests/Phase4AppLayerTests.cs)` now covers the Phase 5 keyboard-capture flow, drag/drop reorder commit behavior, and updated shell summary contract while preserving the existing application-layer regression suite.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet build native/src/RunescapeClicker.App/RunescapeClicker.App.csproj -c Debug -p:Platform=x64`
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+- Manual smoke execution remains a required local follow-up because real app launch, global hotkeys, overlay coordinate capture, and injected input were not exercised in automated tests during this session.
 
 **Phase 6: Hardening, Packaging, And Cutover**
 1. Add a Windows-only CI pipeline because the repo currently has no existing CI: restore, build, test, and publish the WinUI app on Windows runners.

@@ -15,6 +15,7 @@ public sealed class AppSessionStore : ObservableObject
     private MouseButtonKind _mouseButton = MouseButtonKind.Left;
     private ScreenPoint? _selectedCoordinate;
     private KeyOption? _selectedKeyOption;
+    private bool _awaitingKeyCapture;
     private string _delayMillisecondsText = string.Empty;
     private StopRuleMode _stopRuleMode;
     private string _timerSecondsText = "120";
@@ -27,7 +28,7 @@ public sealed class AppSessionStore : ObservableObject
     private string _hotkeyStatusText = "Hotkeys not initialized.";
     private string _lastHotkeyText = "Last hotkey event: none";
     private string _runStatusText = "Run status: idle";
-    private string _statusMessage = "Initializing the Phase 4 application layer...";
+    private string _statusMessage = "Initializing the Phase 5 WinUI shell...";
     private InfoBarSeverity _statusSeverity = InfoBarSeverity.Informational;
     private string _logText = string.Empty;
     private EngineError? _lastFault;
@@ -77,6 +78,12 @@ public sealed class AppSessionStore : ObservableObject
     {
         get => _selectedKeyOption;
         set => SetProperty(ref _selectedKeyOption, value);
+    }
+
+    public bool AwaitingKeyCapture
+    {
+        get => _awaitingKeyCapture;
+        set => SetProperty(ref _awaitingKeyCapture, value);
     }
 
     public string DelayMillisecondsText
@@ -209,6 +216,7 @@ public sealed class AppSessionStore : ObservableObject
         ComposerMode = ComposerMode.MouseClick;
         EditingIndex = null;
         SelectedCoordinate = null;
+        AwaitingKeyCapture = false;
     }
 
     public void BeginKeyDraft()
@@ -216,6 +224,7 @@ public sealed class AppSessionStore : ObservableObject
         ComposerMode = ComposerMode.KeyPress;
         EditingIndex = null;
         SelectedKeyOption = null;
+        AwaitingKeyCapture = true;
     }
 
     public void BeginDelayDraft()
@@ -223,12 +232,14 @@ public sealed class AppSessionStore : ObservableObject
         ComposerMode = ComposerMode.Delay;
         EditingIndex = null;
         DelayMillisecondsText = string.Empty;
+        AwaitingKeyCapture = false;
     }
 
     public void CloseDraft()
     {
         ComposerMode = ComposerMode.None;
         EditingIndex = null;
+        AwaitingKeyCapture = false;
     }
 
     public void SetStopRuleMode(StopRuleMode mode)

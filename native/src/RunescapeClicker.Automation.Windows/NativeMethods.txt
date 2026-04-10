@@ -3,3 +3,5 @@ GetCursorPos
 RegisterHotKey
 UnregisterHotKey
 GetSystemMetrics
+MapVirtualKeyW
+GetKeyNameTextW

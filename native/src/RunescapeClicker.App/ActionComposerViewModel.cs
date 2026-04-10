@@ -2,7 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml.Controls;
+using RunescapeClicker.Automation.Windows;
 using RunescapeClicker.Core;
+using Windows.System;
 
 namespace RunescapeClicker.App;
 
@@ -10,6 +12,7 @@ public sealed class ActionComposerViewModel : ObservableObject
 {
     private readonly AppSessionStore _store;
     private readonly RunCoordinator _coordinator;
+    private readonly IKeyboardKeyMetadataService _keyboardKeyMetadataService;
     private readonly ObservableCollection<KeyOption> _availableKeys =
     [
         new("Space", 0x20, 0x39, false),
@@ -23,19 +26,29 @@ public sealed class ActionComposerViewModel : ObservableObject
         new("F2", 0x71, 0x3C, false),
         new("F24", 0x87, 0x76, false),
     ];
+    private readonly ReadOnlyObservableCollection<KeyOption> _availableKeyOptions;
     private readonly AsyncRelayCommand _captureCurrentCursorCommand;
     private readonly AsyncRelayCommand _pickOnScreenCommand;
+    private readonly RelayCommand _beginKeyCaptureCommand;
+    private readonly RelayCommand _clearCapturedKeyCommand;
     private readonly RelayCommand _confirmDraftCommand;
 
-    public ActionComposerViewModel(AppSessionStore store, RunCoordinator coordinator)
+    public ActionComposerViewModel(
+        AppSessionStore store,
+        RunCoordinator coordinator,
+        IKeyboardKeyMetadataService keyboardKeyMetadataService)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _keyboardKeyMetadataService = keyboardKeyMetadataService ?? throw new ArgumentNullException(nameof(keyboardKeyMetadataService));
+        _availableKeyOptions = new ReadOnlyObservableCollection<KeyOption>(_availableKeys);
 
         BeginAddMouseClickCommand = new RelayCommand(BeginAddMouseClick, CanBeginEditing);
         BeginAddKeyPressCommand = new RelayCommand(BeginAddKeyPress, CanBeginEditing);
         BeginAddDelayCommand = new RelayCommand(BeginAddDelay, CanBeginEditing);
         CancelDraftCommand = new RelayCommand(CancelDraft, () => IsDraftOpen && CanBeginEditing());
+        _beginKeyCaptureCommand = new RelayCommand(BeginKeyCapture, CanCaptureKey);
+        _clearCapturedKeyCommand = new RelayCommand(ClearCapturedKey, CanClearCapturedKey);
         _confirmDraftCommand = new RelayCommand(ConfirmDraft, CanConfirmDraft);
         _captureCurrentCursorCommand = new AsyncRelayCommand(
             () => _coordinator.CaptureCurrentCursorAsync(triggeredByHotkey: false),
@@ -47,7 +60,7 @@ public sealed class ActionComposerViewModel : ObservableObject
         _store.PropertyChanged += (_, args) => OnStorePropertyChanged(args.PropertyName);
     }
 
-    public ReadOnlyObservableCollection<KeyOption> AvailableKeys => new(_availableKeys);
+    public ReadOnlyObservableCollection<KeyOption> AvailableKeys => _availableKeyOptions;
 
     public IReadOnlyList<MouseButtonKind> MouseButtonOptions { get; } = [MouseButtonKind.Left, MouseButtonKind.Right];
 
@@ -58,6 +71,10 @@ public sealed class ActionComposerViewModel : ObservableObject
     public IRelayCommand BeginAddDelayCommand { get; }
 
     public IRelayCommand CancelDraftCommand { get; }
+
+    public IRelayCommand BeginKeyCaptureCommand => _beginKeyCaptureCommand;
+
+    public IRelayCommand ClearCapturedKeyCommand => _clearCapturedKeyCommand;
 
     public IRelayCommand ConfirmDraftCommand => _confirmDraftCommand;
 
@@ -116,6 +133,8 @@ public sealed class ActionComposerViewModel : ObservableObject
 
     public bool IsEditingExistingAction => _store.EditingIndex is not null;
 
+    public bool IsAwaitingKeyCapture => _store.AwaitingKeyCapture;
+
     public string DraftTitle
         => _store.ComposerMode switch
         {
@@ -126,6 +145,18 @@ public sealed class ActionComposerViewModel : ObservableObject
         };
 
     public string ConfirmDraftText => IsEditingExistingAction ? "Save Action" : "Add Action";
+
+    public string CapturedKeyText
+        => _store.SelectedKeyOption is not null
+            ? $"Captured key: {_store.SelectedKeyOption.DisplayLabel}"
+            : IsAwaitingKeyCapture
+                ? "Press a key anywhere in the window to capture it."
+                : "Captured key: none";
+
+    public string KeyCaptureHintText
+        => IsAwaitingKeyCapture
+            ? "The next key you press will be stored with Windows virtual-key and scan-code metadata."
+            : "Click Capture Key, then press the keyboard key you want this action to replay.";
 
     internal void BeginEditAction(int index, AutomationAction action)
     {
@@ -144,6 +175,7 @@ public sealed class ActionComposerViewModel : ObservableObject
             case KeyPressAction keyPressAction:
                 _store.ComposerMode = ComposerMode.KeyPress;
                 _store.SelectedKeyOption = EnsureKeyOption(keyPressAction);
+                _store.AwaitingKeyCapture = false;
                 break;
             case DelayAction delayAction:
                 _store.ComposerMode = ComposerMode.Delay;
@@ -153,6 +185,35 @@ public sealed class ActionComposerViewModel : ObservableObject
         }
 
         RaiseDraftPropertiesChanged();
+    }
+
+    public bool TryCaptureKey(VirtualKey key)
+    {
+        if (!CanCaptureKey() || !_store.AwaitingKeyCapture)
+        {
+            return false;
+        }
+
+        if (!_keyboardKeyMetadataService.TryCreate(key, out var metadata))
+        {
+            _store.SetStatus("That key could not be captured with Windows metadata.", InfoBarSeverity.Warning);
+            return false;
+        }
+
+        var capturedOption = EnsureKeyOption(
+            new KeyPressAction(
+                metadata.VirtualKey,
+                metadata.ScanCode,
+                metadata.IsExtendedKey,
+                metadata.DisplayLabel));
+
+        _store.LastFault = null;
+        _store.SelectedKeyOption = capturedOption;
+        _store.AwaitingKeyCapture = false;
+        _store.SetStatus($"Captured key {capturedOption.DisplayLabel}.", InfoBarSeverity.Success);
+        _store.AppendLog(
+            $"Captured key {capturedOption.DisplayLabel} (VK 0x{capturedOption.VirtualKey:X2}, scan 0x{capturedOption.ScanCode:X2}).");
+        return true;
     }
 
     private void BeginAddMouseClick()
@@ -182,6 +243,31 @@ public sealed class ActionComposerViewModel : ObservableObject
         RaiseDraftPropertiesChanged();
     }
 
+    private void BeginKeyCapture()
+    {
+        if (!CanCaptureKey())
+        {
+            return;
+        }
+
+        _store.AwaitingKeyCapture = true;
+        _store.SetStatus("Press the keyboard key you want to automate.", InfoBarSeverity.Informational);
+        RaiseDraftPropertiesChanged();
+    }
+
+    private void ClearCapturedKey()
+    {
+        if (!CanClearCapturedKey())
+        {
+            return;
+        }
+
+        _store.SelectedKeyOption = null;
+        _store.AwaitingKeyCapture = true;
+        _store.SetStatus("Captured key cleared. Press another key to continue.", InfoBarSeverity.Informational);
+        RaiseDraftPropertiesChanged();
+    }
+
     private void ConfirmDraft()
     {
         if (!TryBuildDraftAction(out var action))
@@ -206,6 +292,7 @@ public sealed class ActionComposerViewModel : ObservableObject
                 break;
             case ComposerMode.KeyPress:
                 _store.SelectedKeyOption = null;
+                _store.AwaitingKeyCapture = false;
                 break;
             case ComposerMode.Delay:
                 _store.DelayMillisecondsText = string.Empty;
@@ -213,7 +300,7 @@ public sealed class ActionComposerViewModel : ObservableObject
         }
 
         _store.CloseDraft();
-        _store.SetStatus($"{ActionSummaryFormatter.Format(action)} added to the sequence.", InfoBarSeverity.Success);
+        _store.SetStatus($"{ActionSummaryFormatter.Format(action)} saved to the sequence.", InfoBarSeverity.Success);
         _store.AppendLog($"Action saved: {ActionSummaryFormatter.Format(action)}.");
         RaiseDraftPropertiesChanged();
     }
@@ -251,6 +338,12 @@ public sealed class ActionComposerViewModel : ObservableObject
     private bool CanCaptureCoordinate()
         => CanBeginEditing() && _store.ComposerMode == ComposerMode.MouseClick && !_store.PickerActive;
 
+    private bool CanCaptureKey()
+        => CanBeginEditing() && _store.ComposerMode == ComposerMode.KeyPress;
+
+    private bool CanClearCapturedKey()
+        => CanCaptureKey() && _store.SelectedKeyOption is not null;
+
     private bool CanConfirmDraft()
         => CanBeginEditing() && TryBuildDraftAction(out _);
 
@@ -279,6 +372,7 @@ public sealed class ActionComposerViewModel : ObservableObject
         {
             case nameof(AppSessionStore.ComposerMode):
             case nameof(AppSessionStore.EditingIndex):
+            case nameof(AppSessionStore.AwaitingKeyCapture):
                 RaiseDraftPropertiesChanged();
                 break;
             case nameof(AppSessionStore.MouseButton):
@@ -291,6 +385,8 @@ public sealed class ActionComposerViewModel : ObservableObject
                 break;
             case nameof(AppSessionStore.SelectedKeyOption):
                 OnPropertyChanged(nameof(SelectedKeyOption));
+                OnPropertyChanged(nameof(CapturedKeyText));
+                _clearCapturedKeyCommand.NotifyCanExecuteChanged();
                 break;
             case nameof(AppSessionStore.DelayMillisecondsText):
                 OnPropertyChanged(nameof(DelayMillisecondsText));
@@ -305,6 +401,8 @@ public sealed class ActionComposerViewModel : ObservableObject
                 _confirmDraftCommand.NotifyCanExecuteChanged();
                 _captureCurrentCursorCommand.NotifyCanExecuteChanged();
                 _pickOnScreenCommand.NotifyCanExecuteChanged();
+                _beginKeyCaptureCommand.NotifyCanExecuteChanged();
+                _clearCapturedKeyCommand.NotifyCanExecuteChanged();
                 break;
         }
     }
@@ -316,11 +414,16 @@ public sealed class ActionComposerViewModel : ObservableObject
         OnPropertyChanged(nameof(IsKeyDraftActive));
         OnPropertyChanged(nameof(IsDelayDraftActive));
         OnPropertyChanged(nameof(IsEditingExistingAction));
+        OnPropertyChanged(nameof(IsAwaitingKeyCapture));
         OnPropertyChanged(nameof(DraftTitle));
         OnPropertyChanged(nameof(ConfirmDraftText));
+        OnPropertyChanged(nameof(CapturedKeyText));
+        OnPropertyChanged(nameof(KeyCaptureHintText));
         CancelDraftCommand.NotifyCanExecuteChanged();
         _confirmDraftCommand.NotifyCanExecuteChanged();
         _captureCurrentCursorCommand.NotifyCanExecuteChanged();
         _pickOnScreenCommand.NotifyCanExecuteChanged();
+        _beginKeyCaptureCommand.NotifyCanExecuteChanged();
+        _clearCapturedKeyCommand.NotifyCanExecuteChanged();
     }
 }

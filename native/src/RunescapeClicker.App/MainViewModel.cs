@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RunescapeClicker.Automation.Windows;
 
 namespace RunescapeClicker.App;
 
@@ -9,13 +10,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly RunCoordinator _coordinator;
     private bool _disposed;
 
-    public MainViewModel(AppSessionStore store, RunCoordinator coordinator)
+    public MainViewModel(
+        AppSessionStore store,
+        RunCoordinator coordinator,
+        IKeyboardKeyMetadataService? keyboardKeyMetadataService = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
 
         SummaryText = AppEnvironment.Summary;
-        ActionComposer = new ActionComposerViewModel(_store, _coordinator);
+        ActionComposer = new ActionComposerViewModel(
+            _store,
+            _coordinator,
+            keyboardKeyMetadataService ?? new KeyboardKeyMetadataService());
         ActionList = new ActionListViewModel(_store, ActionComposer);
         RunPanel = new RunPanelViewModel(_store, _coordinator);
         Status = new StatusViewModel(_store);

@@ -10,18 +10,24 @@ public sealed class ActionListViewModel : ObservableObject
     private readonly ActionComposerViewModel _composerViewModel;
     private readonly ObservableCollection<ActionListItemViewModel> _items = [];
     private readonly RelayCommand _clearActionsCommand;
+    private bool _suppressCollectionRefresh;
 
     public ActionListViewModel(AppSessionStore store, ActionComposerViewModel composerViewModel)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _composerViewModel = composerViewModel ?? throw new ArgumentNullException(nameof(composerViewModel));
-        Items = new ReadOnlyObservableCollection<ActionListItemViewModel>(_items);
         _clearActionsCommand = new RelayCommand(ClearActions, () => CanModifyActions && _store.HasActions);
+        Items = _items;
 
         _store.Actions.CollectionChanged += (_, _) =>
         {
-            RebuildItems();
+            if (!_suppressCollectionRefresh)
+            {
+                RebuildItems();
+            }
+
             OnPropertyChanged(nameof(HasActions));
+            OnPropertyChanged(nameof(ShowEmptyState));
             _clearActionsCommand.NotifyCanExecuteChanged();
         };
 
@@ -29,21 +35,75 @@ public sealed class ActionListViewModel : ObservableObject
         {
             if (args.PropertyName is nameof(AppSessionStore.RunInProgress) or nameof(AppSessionStore.StopRequested))
             {
+                OnPropertyChanged(nameof(CanModifyActions));
                 _clearActionsCommand.NotifyCanExecuteChanged();
                 RefreshItemCommands();
             }
         };
     }
 
-    public ReadOnlyObservableCollection<ActionListItemViewModel> Items { get; }
+    public ObservableCollection<ActionListItemViewModel> Items { get; }
 
     public IRelayCommand ClearActionsCommand => _clearActionsCommand;
 
     public bool HasActions => _store.HasActions;
 
+    public bool ShowEmptyState => !HasActions;
+
     public bool CanModifyActions => !_store.RunInProgress && !_store.StopRequested;
 
     internal int Count => _store.Actions.Count;
+
+    internal void CommitCurrentItemOrder()
+    {
+        if (!CanModifyActions || _items.Count != _store.Actions.Count)
+        {
+            RebuildItems();
+            return;
+        }
+
+        var orderedActions = _items.Select(item => item.Action).ToArray();
+        var editedAction = _store.EditingIndex is int editingIndex && editingIndex < _store.Actions.Count
+            ? _store.Actions[editingIndex]
+            : null;
+
+        var changed = false;
+        for (var index = 0; index < orderedActions.Length; index++)
+        {
+            if (!ReferenceEquals(_store.Actions[index], orderedActions[index]))
+            {
+                changed = true;
+                break;
+            }
+        }
+
+        if (!changed)
+        {
+            RefreshItemOrder();
+            return;
+        }
+
+        _suppressCollectionRefresh = true;
+        try
+        {
+            for (var index = 0; index < orderedActions.Length; index++)
+            {
+                _store.Actions[index] = orderedActions[index];
+            }
+        }
+        finally
+        {
+            _suppressCollectionRefresh = false;
+        }
+
+        if (editedAction is not null)
+        {
+            _store.EditingIndex = Array.FindIndex(orderedActions, action => ReferenceEquals(action, editedAction));
+        }
+
+        RebuildItems();
+        _store.SetStatus("Sequence reordered.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success);
+    }
 
     internal void EditAction(int index)
     {
@@ -111,6 +171,14 @@ public sealed class ActionListViewModel : ObservableObject
         for (var index = 0; index < _store.Actions.Count; index++)
         {
             _items.Add(new ActionListItemViewModel(this, index, _store.Actions[index]));
+        }
+    }
+
+    private void RefreshItemOrder()
+    {
+        for (var index = 0; index < _items.Count; index++)
+        {
+            _items[index].Update(index, _items[index].Action);
         }
     }
 
