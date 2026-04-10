@@ -4,7 +4,7 @@
 - Rewrite the app as a Windows-only native desktop application in C# with WinUI 3, with a clean-break .NET solution and no Linux compatibility work.
 - Follow an execution-first migration: extract the automation engine into a testable C# core before any UI rebuild, then rebuild the interface entirely with native WinUI 3 controls.
 - Ground truth today: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`).
-- Current migration status: Phases 0, 1, 2, and 3 are complete as of April 10, 2026. The repo now contains a validated native bootstrap, execution core, and Windows automation harness at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
+- Current migration status: Phases 0, 1, 2, 3, and 4 are complete as of April 10, 2026. The repo now contains a validated native bootstrap, execution core, Windows automation harness, and Phase 4 application state layer at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
 
 **Target Architecture And Public Interfaces**
 - New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, `RunescapeClicker.Automation.Windows.Tests`, and `RunescapeClicker.App.Tests`.
@@ -20,7 +20,7 @@
 - Phase 1: Completed on April 10, 2026.
 - Phase 2: Completed on April 10, 2026.
 - Phase 3: Completed on April 10, 2026.
-- Phase 4: Pending.
+- Phase 4: Completed on April 10, 2026.
 - Phase 5: Pending.
 - Phase 6: Pending.
 
@@ -90,12 +90,23 @@
   - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
 - Manual smoke execution remains a required local follow-up because real global hotkeys, overlay capture, and input injection are intentionally not exercised in CI; the harness exists specifically to run that checklist on a Windows desktop.
 
-**Phase 4: Build The Application Layer And State Model**
-1. Create `MainViewModel`, `ActionComposerViewModel`, `ActionListViewModel`, `RunPanelViewModel`, and `StatusViewModel`, backed by a single in-memory session store.
-2. Model explicit app states: `Idle`, `CapturingCoordinate`, `EditingAction`, `ReadyToRun`, `Running`, `Stopping`, and `Faulted`.
-3. Use commands for `AddMouseClick`, `AddKeyPress`, `AddDelay`, `EditAction`, `DeleteAction`, `MoveAction`, `CaptureCoordinate`, `StartRun`, and `StopRun`.
-4. Build a run coordinator that converts mutable UI state into immutable `RunRequest` snapshots, starts the engine on a background task, and marshals progress/error events back to the UI thread.
-5. Keep v1 session-only: no save/load profiles, no import/export, and no background service mode.
+**Phase 4: Build The Application Layer And State Model (Completed April 10, 2026)**
+1. [x] Create `MainViewModel`, `ActionComposerViewModel`, `ActionListViewModel`, `RunPanelViewModel`, and `StatusViewModel`, backed by a single in-memory session store.
+2. [x] Model explicit app states: `Idle`, `CapturingCoordinate`, `EditingAction`, `ReadyToRun`, `Running`, `Stopping`, and `Faulted`.
+3. [x] Use commands for `AddMouseClick`, `AddKeyPress`, `AddDelay`, `EditAction`, `DeleteAction`, `MoveAction`, `CaptureCoordinate`, `StartRun`, and `StopRun`.
+4. [x] Build a run coordinator that converts mutable UI state into immutable `RunRequest` snapshots, starts the engine on a background task, and marshals progress/error events back to the UI thread.
+5. [x] Keep v1 session-only: no save/load profiles, no import/export, and no background service mode.
+
+**Phase 4 Completion Notes**
+- `[native/src/RunescapeClicker.App](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App)` now contains a testable app layer centered on `AppSessionStore`, `RunCoordinator`, `IUiDispatcher`, `MainViewModel`, `ActionComposerViewModel`, `ActionListViewModel`, `RunPanelViewModel`, and `StatusViewModel`.
+- `[native/src/RunescapeClicker.App/MainWindow.xaml](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml)` and `[native/src/RunescapeClicker.App/MainWindow.xaml.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml.cs)` are now a thin binding surface over the Phase 4 composition root while still exposing the existing smoke harness actions for local validation.
+- The session store is now the single source of truth for ordered actions, draft/edit state, coordinate capture state, stop-rule configuration, active run snapshots, status text, log text, and surfaced faults.
+- The action composer and run panel preserve the Phase 4 behavioral requirements: mouse drafts clear coordinates on begin, `F1` direct capture only applies to active mouse drafts while the picker is inactive, non-mouse drafts preserve unrelated editor state, invalid key/delay/timer input leaves the editor open and preserves the last valid run settings, and run start snapshots `ExecutionProfile.Default` into an immutable `RunRequest`.
+- `[native/tests/RunescapeClicker.App.Tests/Phase4AppLayerTests.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/tests/RunescapeClicker.App.Tests/Phase4AppLayerTests.cs)` now covers the new view-model and coordinator seams with fake engine, hotkey, picker, input, and dispatcher implementations, and `[native/src/RunescapeClicker.App/AssemblyInfo.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/AssemblyInfo.cs)` exposes internals to the app test project.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet build native/src/RunescapeClicker.App/RunescapeClicker.App.csproj -c Debug -p:Platform=x64`
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+- Manual smoke execution remains a required local follow-up because real app launch, hotkey registration, overlay capture, and injected input were not exercised in automated tests during this session.
 
 **Phase 5: Rebuild The UI From Scratch In WinUI 3**
 1. Replace the egui single-surface UI with a WinUI 3 single-window shell using stock controls only: `CommandBar`, `ComboBox`, `RadioButtons`, `NumberBox`, `AutoSuggestBox` or captured key field, `ListView`, `InfoBar`, `ContentDialog`, `ToolTip`, `TeachingTip`, and `ProgressRing`.
