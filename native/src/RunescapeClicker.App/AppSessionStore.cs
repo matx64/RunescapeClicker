@@ -28,7 +28,7 @@ public sealed class AppSessionStore : ObservableObject
     private string _hotkeyStatusText = "Hotkeys not initialized.";
     private string _lastHotkeyText = "Last hotkey event: none";
     private string _runStatusText = "Run status: idle";
-    private string _statusMessage = "Initializing the Phase 5 WinUI shell...";
+    private string _statusMessage = "Initializing the Phase 6 WinUI shell...";
     private InfoBarSeverity _statusSeverity = InfoBarSeverity.Informational;
     private string _logText = string.Empty;
     private EngineError? _lastFault;

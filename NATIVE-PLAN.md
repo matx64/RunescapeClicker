@@ -4,7 +4,7 @@
 - Rewrite the app as a Windows-only native desktop application in C# with WinUI 3, with a clean-break .NET solution and no Linux compatibility work.
 - Follow an execution-first migration: extract the automation engine into a testable C# core before any UI rebuild, then rebuild the interface entirely with native WinUI 3 controls.
 - Ground truth today: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`).
-- Current migration status: Phases 0, 1, 2, 3, and 4 are complete as of April 10, 2026. The repo now contains a validated native bootstrap, execution core, Windows automation harness, and Phase 4 application state layer at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
+- Current migration status: Phases 0 through 6 are complete as of April 10, 2026. The repo now contains a validated native solution, execution core, Windows automation harness, WinUI shell, release packaging scripts, and Windows-only CI at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
 
 **Target Architecture And Public Interfaces**
 - New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, `RunescapeClicker.Automation.Windows.Tests`, and `RunescapeClicker.App.Tests`.
@@ -22,7 +22,7 @@
 - Phase 3: Completed on April 10, 2026.
 - Phase 4: Completed on April 10, 2026.
 - Phase 5: Completed on April 10, 2026.
-- Phase 6: Pending.
+- Phase 6: Completed on April 10, 2026.
 
 **Phase 0: Freeze The Rust App As Reference (Completed April 10, 2026)**
 1. [x] Capture the current behavioral contract from `[old-version/src/action.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/action.rs)`, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)`, `[old-version/src/hotkey.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/hotkey.rs)`, README, and existing tests.
@@ -127,12 +127,23 @@
   - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
 - Manual smoke execution remains a required local follow-up because real app launch, global hotkeys, overlay coordinate capture, and injected input were not exercised in automated tests during this session.
 
-**Phase 6: Hardening, Packaging, And Cutover**
-1. Add a Windows-only CI pipeline because the repo currently has no existing CI: restore, build, test, and publish the WinUI app on Windows runners.
-2. Produce self-contained unpackaged x64 artifacts first, then add an installer/bootstrapper that checks the Windows App Runtime prerequisite and provides a guided install path.
-3. Add friendly runtime messaging for unsupported cases: hotkey collision, blocked input injection, elevated target window, and coordinate-picker cancellation.
-4. Update all docs to say Linux support ended and Windows is the only supported platform.
-5. When acceptance passes, archive the Rust app as legacy reference, remove Cargo from the default developer path, and make the .NET solution the sole maintained application.
+**Phase 6: Hardening, Packaging, And Cutover (Completed April 10, 2026)**
+1. [x] Add a Windows-only CI pipeline because the repo currently had no existing CI: restore, build, test, and publish the WinUI app on Windows runners.
+2. [x] Produce self-contained unpackaged x64 artifacts and add an installer/bootstrapper that validates Windows 11 x64 requirements, stages a guided install path, and installs the app under `%LocalAppData%\RunescapeClicker`.
+3. [x] Add friendly runtime messaging for unsupported cases: hotkey collision, blocked input injection, elevated target window, and coordinate-picker cancellation.
+4. [x] Update all docs to say Linux support ended and Windows is the only supported platform.
+5. [x] Archive the Rust app as a legacy reference in repo docs, remove Cargo from the default developer path, and make the .NET solution the sole maintained application.
+
+**Phase 6 Completion Notes**
+- `[global.json](C:/Users/mathe/Documents/dev/RunescapeClicker/global.json)` now pins `.NET SDK 10.0.201` with stable patch roll-forward so local development and CI use the same toolchain.
+- `[.github/workflows/native-ci.yml](C:/Users/mathe/Documents/dev/RunescapeClicker/.github/workflows/native-ci.yml)` now runs restore, build, test, self-contained packaging, and artifact upload on Windows runners for pushes and pull requests.
+- `[native/scripts/Create-Package.ps1](C:/Users/mathe/Documents/dev/RunescapeClicker/native/scripts/Create-Package.ps1)`, `[native/scripts/Install-RunescapeClicker.ps1](C:/Users/mathe/Documents/dev/RunescapeClicker/native/scripts/Install-RunescapeClicker.ps1)`, and `[native/scripts/PACKAGE-README.txt](C:/Users/mathe/Documents/dev/RunescapeClicker/native/scripts/PACKAGE-README.txt)` now produce a self-contained `RunescapeClicker-win-x64` folder plus zip, validate Windows 11 x64 install prerequisites, install the app into `%LocalAppData%\RunescapeClicker`, and create a Start Menu shortcut.
+- `[native/src/RunescapeClicker.Core/IInputAdapter.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Core/IInputAdapter.cs)`, `[native/src/RunescapeClicker.Core/EngineError.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Core/EngineError.cs)`, `[native/src/RunescapeClicker.Automation.Windows/HotkeyRegistrationResult.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Automation.Windows/HotkeyRegistrationResult.cs)`, and `[native/src/RunescapeClicker.App/AppMessageFormatter.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/AppMessageFormatter.cs)` now carry structured failure metadata from Win32 interop through the engine into friendly WinUI messaging while preserving technical details in the live log.
+- Docs now reflect the cutover: `[README.md](C:/Users/mathe/Documents/dev/RunescapeClicker/README.md)` is the primary repo guide, `[native/README.md](C:/Users/mathe/Documents/dev/RunescapeClicker/native/README.md)` documents the maintained native workflow, and `[old-version/README.md](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/README.md)` is now a legacy-reference notice instead of a shipping guide.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+  - `dotnet publish native/src/RunescapeClicker.App/RunescapeClicker.App.csproj -c Release -p:Platform=x64 -r win-x64 -p:PublishProfile=win-x64`
+  - `pwsh native/scripts/Create-Package.ps1`
 
 **Test Plan**
 - Port every Rust executor scenario into C# unit/integration tests before feature sign-off.

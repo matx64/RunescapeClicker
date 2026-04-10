@@ -41,13 +41,17 @@ public sealed class GlobalHotkeyService : IHotkeyService
         var handle = await _windowHost.EnsureWindowHandleAsync(cancellationToken);
         if (!_interop.RegisterHotKey(handle, CaptureCursorHotkeyId, ModNoRepeat, VirtualKeyF1))
         {
-            return HotkeyRegistrationResult.Failure("Failed to register F1. Another application may already be using that hotkey.");
+            return HotkeyRegistrationResult.Collision(
+                AutomationHotkey.CaptureCursor,
+                "Failed to register F1. Another application may already be using that hotkey.");
         }
 
         if (!_interop.RegisterHotKey(handle, StopRunHotkeyId, ModNoRepeat, VirtualKeyF2))
         {
             _interop.UnregisterHotKey(handle, CaptureCursorHotkeyId);
-            return HotkeyRegistrationResult.Failure("Failed to register F2. Another application may already be using that hotkey.");
+            return HotkeyRegistrationResult.Collision(
+                AutomationHotkey.StopRun,
+                "Failed to register F2. Another application may already be using that hotkey.");
         }
 
         IsRegistered = true;

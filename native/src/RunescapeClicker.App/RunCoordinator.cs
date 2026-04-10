@@ -50,7 +50,7 @@ public sealed class RunCoordinator : IDisposable
                 if (result.Succeeded)
                 {
                     _store.HotkeysRegistered = true;
-                    _store.HotkeyStatusText = "Global hotkeys registered: F1 captures the current cursor and F2 stops the active run.";
+                    _store.HotkeyStatusText = AppMessageFormatter.FormatHotkeyStatus(result);
                     _store.SetStatus("Global hotkeys are active.", InfoBarSeverity.Success);
                     _store.AppendLog("Hotkeys registered successfully.");
                 }
@@ -58,8 +58,8 @@ public sealed class RunCoordinator : IDisposable
                 {
                     var failureMessage = result.FailureMessage ?? "Failed to register global hotkeys.";
                     _store.HotkeysRegistered = false;
-                    _store.HotkeyStatusText = $"Global hotkeys failed to register: {failureMessage}";
-                    _store.SetStatus(failureMessage, InfoBarSeverity.Warning);
+                    _store.HotkeyStatusText = AppMessageFormatter.FormatHotkeyStatus(result);
+                    _store.SetStatus(AppMessageFormatter.FormatHotkeyInfoBar(result), InfoBarSeverity.Warning);
                     _store.AppendLog($"Hotkey registration failed: {failureMessage}");
                 }
             });
@@ -89,9 +89,8 @@ public sealed class RunCoordinator : IDisposable
         {
             if (!cursor.Succeeded)
             {
-                var message = cursor.FailureMessage ?? "Failed to capture the current cursor position.";
-                _store.SetStatus(message, InfoBarSeverity.Error);
-                _store.AppendLog(message);
+                _store.SetStatus(AppMessageFormatter.FormatCursorCaptureFailure(cursor), InfoBarSeverity.Error);
+                _store.AppendLog(cursor.FailureMessage ?? "Failed to capture the current cursor position.");
                 return;
             }
 
@@ -125,6 +124,7 @@ public sealed class RunCoordinator : IDisposable
 
         try
         {
+            var hadExistingCoordinate = _store.SelectedCoordinate is not null;
             var result = await _coordinatePickerService.PickCoordinateAsync(cancellationToken);
             await _dispatcher.InvokeAsync(() =>
             {
@@ -139,7 +139,7 @@ public sealed class RunCoordinator : IDisposable
                             $"Overlay picker captured ({result.Position.Value.X}, {result.Position.Value.Y}).");
                         break;
                     case CoordinatePickerOutcome.Cancelled:
-                        _store.SetStatus(result.Message ?? "Mouse position capture cancelled.", InfoBarSeverity.Warning);
+                        _store.SetStatus(AppMessageFormatter.FormatCoordinatePickerCancellation(hadExistingCoordinate), InfoBarSeverity.Warning);
                         _store.AppendLog(result.Message ?? "Mouse position capture cancelled.");
                         break;
                     case CoordinatePickerOutcome.Busy:
@@ -277,8 +277,8 @@ public sealed class RunCoordinator : IDisposable
         {
             await _dispatcher.InvokeAsync(() =>
             {
-                _store.LastFault = new EngineError(EngineErrorCode.InputAdapterUnavailable, ex.Message);
-                _store.SetStatus(ex.Message, InfoBarSeverity.Error);
+                _store.LastFault = new EngineError(EngineErrorCode.InputAdapterUnavailable, ex.Message, FailureKind: InputFailureKind.Unknown);
+                _store.SetStatus(AppMessageFormatter.FormatRunFault(_store.LastFault), InfoBarSeverity.Error);
                 _store.RunStatusText = "Run status: faulted";
                 _store.AppendLog($"Unexpected harness exception: {ex.Message}");
             });
@@ -330,7 +330,7 @@ public sealed class RunCoordinator : IDisposable
 
         if (result.Error is not null)
         {
-            _store.SetStatus(result.Error.Message, InfoBarSeverity.Error);
+            _store.SetStatus(AppMessageFormatter.FormatRunFault(result.Error), InfoBarSeverity.Error);
             _store.AppendLog($"Run faulted: {result.Error.Message}");
             return;
         }

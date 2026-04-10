@@ -37,6 +37,8 @@ public sealed class GlobalHotkeyServiceTests
         var result = await service.EnsureRegisteredAsync(CancellationToken.None);
 
         result.Succeeded.Should().BeFalse();
+        result.FailureKind.Should().Be(HotkeyRegistrationFailureKind.Collision);
+        result.Hotkey.Should().Be(AutomationHotkey.StopRun);
         result.FailureMessage.Should().Contain("F2");
         interop.UnregisteredHotkeys.Should().Contain(0x1001);
     }

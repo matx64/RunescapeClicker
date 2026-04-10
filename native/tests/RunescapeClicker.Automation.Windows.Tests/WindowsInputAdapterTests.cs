@@ -31,6 +31,7 @@ public sealed class WindowsInputAdapterTests
 
         result.Succeeded.Should().BeFalse();
         result.FailureMessage.Should().Be("cursor unavailable");
+        result.FailureKind.Should().Be(InputFailureKind.CursorReadUnavailable);
     }
 
     [Fact]
@@ -75,7 +76,9 @@ public sealed class WindowsInputAdapterTests
     {
         var interop = new FakeWin32Interop
         {
-            MoveResult = InputAdapterResult.Failure("Failed to move the mouse. Windows blocked the injected input."),
+            MoveResult = InputAdapterResult.Failure(
+                InputFailureKind.BlockedByWindows,
+                "Failed to move the mouse. Windows blocked the injected input."),
         };
         var adapter = new WindowsInputAdapter(interop);
 
@@ -83,6 +86,7 @@ public sealed class WindowsInputAdapterTests
 
         result.Succeeded.Should().BeFalse();
         result.FailureMessage.Should().Contain("blocked");
+        result.FailureKind.Should().Be(InputFailureKind.BlockedByWindows);
     }
 
     private sealed class FakeWin32Interop : IWin32Interop

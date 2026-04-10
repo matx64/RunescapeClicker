@@ -273,7 +273,9 @@ public sealed class Phase4AppLayerTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var hotkeys = new FakeHotkeyService
         {
-            RegistrationResult = HotkeyRegistrationResult.Failure("F2 is already registered by another app."),
+            RegistrationResult = HotkeyRegistrationResult.Collision(
+                AutomationHotkey.StopRun,
+                "F2 is already registered by another app."),
         };
         var store = CreateStore();
         using var coordinator = CreateCoordinator(store, hotkeyService: hotkeys);
@@ -282,7 +284,32 @@ public sealed class Phase4AppLayerTests
 
         store.HotkeysRegistered.Should().BeFalse();
         store.HotkeyStatusText.Should().Contain("F2");
+        store.StatusMessage.Should().Contain("Retry Hotkeys");
         store.StatusSeverity.Should().Be(InfoBarSeverity.Warning);
+    }
+
+    [Fact]
+    public async Task RetryHotkeysCanRecoverAfterAnInitialCollision()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var hotkeys = new FakeHotkeyService
+        {
+            RegistrationResult = HotkeyRegistrationResult.Collision(
+                AutomationHotkey.CaptureCursor,
+                "F1 is already registered by another app."),
+        };
+        var store = CreateStore();
+        using var coordinator = CreateCoordinator(store, hotkeyService: hotkeys);
+
+        await coordinator.InitializeAsync(cancellationToken);
+        store.HotkeysRegistered.Should().BeFalse();
+
+        hotkeys.RegistrationResult = HotkeyRegistrationResult.Success();
+        await coordinator.InitializeAsync(cancellationToken);
+
+        hotkeys.EnsureRegisteredCalls.Should().Be(2);
+        store.HotkeysRegistered.Should().BeTrue();
+        store.StatusMessage.Should().Be("Global hotkeys are active.");
     }
 
     [Fact]
@@ -364,12 +391,17 @@ public sealed class Phase4AppLayerTests
             1,
             0,
             TimeSpan.FromMilliseconds(10),
-            new EngineError(EngineErrorCode.KeyPressFailed, "Key blocked", 0)));
+            new EngineError(
+                EngineErrorCode.KeyPressFailed,
+                "Key blocked",
+                0,
+                InputFailureKind.ElevatedTarget)));
         await runTask;
 
         viewModel.CurrentState.Should().Be(AppState.Faulted);
         store.StatusSeverity.Should().Be(InfoBarSeverity.Error);
-        store.StatusMessage.Should().Be("Key blocked");
+        store.StatusMessage.Should().Contain("same privilege level");
+        store.LogText.Should().Contain("Key blocked");
     }
 
     [Fact]
@@ -382,7 +414,9 @@ public sealed class Phase4AppLayerTests
         };
         var hotkeys = new FakeHotkeyService
         {
-            RegistrationResult = HotkeyRegistrationResult.Failure("F1 collision"),
+            RegistrationResult = HotkeyRegistrationResult.Collision(
+                AutomationHotkey.CaptureCursor,
+                "F1 collision"),
         };
         var store = CreateStore();
         using var coordinator = CreateCoordinator(store, inputAdapter: input, hotkeyService: hotkeys);
@@ -441,12 +475,33 @@ public sealed class Phase4AppLayerTests
     }
 
     [Fact]
-    public void AppEnvironmentSummaryMentionsThePhase5Shell()
+    public async Task PickerCancellationKeepsThePreviousCoordinateAndShowsAFriendlyMessage()
     {
-        AppEnvironment.Summary.Should().Contain("Phase 5");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        store.SelectedCoordinate = new ScreenPoint(90, 120);
+        var picker = new FakeCoordinatePickerService
+        {
+            Result = CoordinatePickerResult.Cancelled(),
+        };
+        using var coordinator = CreateCoordinator(store, coordinatePickerService: picker);
+        var viewModel = new MainViewModel(store, coordinator);
+        viewModel.ActionComposer.BeginAddMouseClickCommand.Execute(null);
+        store.SelectedCoordinate = new ScreenPoint(90, 120);
+
+        await coordinator.PickCoordinateAsync(cancellationToken);
+
+        store.SelectedCoordinate.Should().Be(new ScreenPoint(90, 120));
+        store.StatusMessage.Should().Be("Coordinate pick was cancelled. The previous point is still selected.");
+    }
+
+    [Fact]
+    public void AppEnvironmentSummaryMentionsThePhase6Shell()
+    {
+        AppEnvironment.Summary.Should().Contain("Phase 6");
         AppEnvironment.Summary.Should().Contain("RunescapeClicker.Core");
         AppEnvironment.Summary.Should().Contain("RunescapeClicker.Automation.Windows");
-        AppEnvironment.Summary.Should().Contain("native Windows key capture");
+        AppEnvironment.Summary.Should().Contain("friendly Windows failure guidance");
     }
 
     private static AppSessionStore CreateStore() => new();
@@ -517,10 +572,15 @@ public sealed class Phase4AppLayerTests
 
         public bool IsRegistered => RegistrationResult.Succeeded;
 
-        public HotkeyRegistrationResult RegistrationResult { get; init; } = HotkeyRegistrationResult.Success();
+        public int EnsureRegisteredCalls { get; private set; }
+
+        public HotkeyRegistrationResult RegistrationResult { get; set; } = HotkeyRegistrationResult.Success();
 
         public Task<HotkeyRegistrationResult> EnsureRegisteredAsync(CancellationToken cancellationToken)
-            => Task.FromResult(RegistrationResult);
+        {
+            EnsureRegisteredCalls++;
+            return Task.FromResult(RegistrationResult);
+        }
 
         public void Raise(AutomationHotkey hotkey)
             => HotkeyPressed?.Invoke(this, new HotkeyPressedEventArgs(hotkey, DateTimeOffset.UtcNow));

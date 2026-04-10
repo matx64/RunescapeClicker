@@ -54,7 +54,7 @@ public sealed class ClickerEngineTests
         var runtime = new FakeExecutionRuntime();
         var adapter = new FakeInputAdapter
         {
-            ConnectResult = InputAdapterResult.Failure("backend unavailable"),
+            ConnectResult = InputAdapterResult.Failure(InputFailureKind.Unknown, "backend unavailable"),
         };
         var engine = new ClickerEngine(adapter, runtime);
 
@@ -69,7 +69,8 @@ public sealed class ClickerEngineTests
         result.Outcome.Should().Be(RunOutcome.Faulted);
         result.Error.Should().BeEquivalentTo(new EngineError(
             EngineErrorCode.InputAdapterUnavailable,
-            "Failed to start the input backend: backend unavailable"));
+            "Failed to start the input backend: backend unavailable",
+            FailureKind: InputFailureKind.Unknown));
         adapter.Operations.Should().BeEmpty();
     }
 
@@ -83,7 +84,7 @@ public sealed class ClickerEngineTests
         var adapter = new FakeInputAdapter
         {
             CurrentLocation = new ScreenPoint(100, 100),
-            MoveResult = InputAdapterResult.Failure("cursor locked"),
+            MoveResult = InputAdapterResult.Failure(InputFailureKind.BlockedByWindows, "cursor locked"),
         };
         var engine = new ClickerEngine(adapter, runtime);
 
@@ -99,7 +100,8 @@ public sealed class ClickerEngineTests
         result.Error.Should().BeEquivalentTo(new EngineError(
             EngineErrorCode.MouseMoveFailed,
             "Failed to move the mouse: cursor locked",
-            0));
+            0,
+            InputFailureKind.BlockedByWindows));
         adapter.Operations.Should().BeEmpty();
     }
 
@@ -115,7 +117,7 @@ public sealed class ClickerEngineTests
         var adapter = new FakeInputAdapter
         {
             CurrentLocation = new ScreenPoint(90, 120),
-            ClickResult = InputAdapterResult.Failure("button jammed"),
+            ClickResult = InputAdapterResult.Failure(InputFailureKind.PartialInjection, "button jammed"),
         };
         var engine = new ClickerEngine(adapter, runtime);
 
@@ -131,7 +133,8 @@ public sealed class ClickerEngineTests
         result.Error.Should().BeEquivalentTo(new EngineError(
             EngineErrorCode.MouseClickFailed,
             "Failed to click the mouse: button jammed",
-            0));
+            0,
+            InputFailureKind.PartialInjection));
         adapter.Operations.Should().HaveCountGreaterThan(1);
         adapter.Operations[^1].Should().Be("move:3:7");
         adapter.Operations.Should().OnlyContain(operation => operation.StartsWith("move:", StringComparison.Ordinal));
@@ -146,7 +149,7 @@ public sealed class ClickerEngineTests
         };
         var adapter = new FakeInputAdapter
         {
-            KeyResult = InputAdapterResult.Failure("key blocked"),
+            KeyResult = InputAdapterResult.Failure(InputFailureKind.ElevatedTarget, "key blocked"),
         };
         var engine = new ClickerEngine(adapter, runtime);
 
@@ -162,7 +165,8 @@ public sealed class ClickerEngineTests
         result.Error.Should().BeEquivalentTo(new EngineError(
             EngineErrorCode.KeyPressFailed,
             "Failed to press the key 'enter': key blocked",
-            0));
+            0,
+            InputFailureKind.ElevatedTarget));
         adapter.Operations.Should().BeEmpty();
     }
 
@@ -362,7 +366,7 @@ public sealed class ClickerEngineTests
         };
         var adapter = new FakeInputAdapter
         {
-            CursorLocationResult = CursorLocationResult.Failure("unavailable"),
+            CursorLocationResult = CursorLocationResult.Failure(InputFailureKind.CursorReadUnavailable, "unavailable"),
         };
         var engine = new ClickerEngine(adapter, runtime);
 

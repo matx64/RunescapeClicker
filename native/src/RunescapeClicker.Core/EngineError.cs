@@ -3,7 +3,8 @@ namespace RunescapeClicker.Core;
 public sealed record EngineError(
     EngineErrorCode Code,
     string Message,
-    int? ActionIndex = null);
+    int? ActionIndex = null,
+    InputFailureKind FailureKind = InputFailureKind.None);
 
 public enum EngineErrorCode
 {

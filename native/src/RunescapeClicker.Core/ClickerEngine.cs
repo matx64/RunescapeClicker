@@ -47,7 +47,8 @@ public sealed class ClickerEngine : IClickerEngine
                 0,
                 new EngineError(
                     EngineErrorCode.InputAdapterUnavailable,
-                    $"Failed to start the input backend: {connectResult.FailureMessage ?? "Unknown input adapter error."}"));
+                    $"Failed to start the input backend: {connectResult.FailureMessage ?? "Unknown input adapter error."}",
+                    FailureKind: connectResult.FailureKind));
         }
 
         var iterationsStarted = 0;
@@ -135,7 +136,8 @@ public sealed class ClickerEngine : IClickerEngine
             return ActionExecutionResult.Fault(new EngineError(
                 EngineErrorCode.MouseClickFailed,
                 $"Failed to click the mouse: {clickResult.FailureMessage ?? "Unknown mouse click failure."}",
-                actionIndex));
+                actionIndex,
+                clickResult.FailureKind));
         }
 
         return ActionExecutionResult.Continue();
@@ -159,7 +161,8 @@ public sealed class ClickerEngine : IClickerEngine
             return ActionExecutionResult.Fault(new EngineError(
                 EngineErrorCode.KeyPressFailed,
                 $"Failed to press the key '{action.DisplayLabel}': {keyResult.FailureMessage ?? "Unknown key press failure."}",
-                actionIndex));
+                actionIndex,
+                keyResult.FailureKind));
         }
 
         return ActionExecutionResult.Continue();
@@ -196,7 +199,8 @@ public sealed class ClickerEngine : IClickerEngine
                 return ActionExecutionResult.Fault(new EngineError(
                     EngineErrorCode.MouseMoveFailed,
                     $"Failed to move the mouse: {directMoveResult.FailureMessage ?? "Unknown mouse movement failure."}",
-                    actionIndex));
+                    actionIndex,
+                    directMoveResult.FailureKind));
             }
 
             if (!await SleepAsync(_runtime.NextPostMoveClickDelay(profile), profile, stopCondition, cancellationToken))
@@ -263,7 +267,8 @@ public sealed class ClickerEngine : IClickerEngine
                     return ActionExecutionResult.Fault(new EngineError(
                         EngineErrorCode.MouseMoveFailed,
                         $"Failed to move the mouse: {moveResult.FailureMessage ?? "Unknown mouse movement failure."}",
-                        actionIndex));
+                        actionIndex,
+                        moveResult.FailureKind));
                 }
 
                 previous = next;

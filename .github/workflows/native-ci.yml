@@ -1,0 +1,40 @@
+name: Native CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  native:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.201
+
+      - name: Restore
+        run: dotnet restore .\native\RunescapeClicker.sln
+
+      - name: Build
+        run: dotnet build .\native\RunescapeClicker.sln -c Debug -p:Platform=x64 --no-restore
+
+      - name: Test
+        run: dotnet test .\native\RunescapeClicker.sln -c Debug -p:Platform=x64 --no-build
+
+      - name: Create self-contained package
+        shell: pwsh
+        run: .\native\scripts\Create-Package.ps1
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runescape-clicker-win-x64
+          path: native/artifacts/RunescapeClicker-win-x64*
+          if-no-files-found: error

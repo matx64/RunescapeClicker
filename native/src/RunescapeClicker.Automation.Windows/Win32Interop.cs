@@ -31,7 +31,9 @@ internal sealed class Win32Interop : IWin32Interop
     {
         if (!PInvoke.GetCursorPos(out var point))
         {
-            return CursorLocationResult.Failure(CreateWin32Message("Failed to read the current cursor position."));
+            return CursorLocationResult.Failure(
+                InputFailureKind.CursorReadUnavailable,
+                CreateWin32Message("Failed to read the current cursor position."));
         }
 
         return CursorLocationResult.Success(new ScreenPoint(point.X, point.Y));
@@ -43,7 +45,7 @@ internal sealed class Win32Interop : IWin32Interop
         var virtualHeight = PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CYVIRTUALSCREEN);
         if (virtualWidth <= 0 || virtualHeight <= 0)
         {
-            return InputAdapterResult.Failure("Windows reported an invalid virtual desktop size.");
+            return InputAdapterResult.Failure(InputFailureKind.Unknown, "Windows reported an invalid virtual desktop size.");
         }
 
         var virtualLeft = PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_XVIRTUALSCREEN);
@@ -151,24 +153,29 @@ internal sealed class Win32Interop : IWin32Interop
         var sent = PInvoke.SendInput(inputs, Marshal.SizeOf<INPUT>());
         if (sent == 0)
         {
-            return InputAdapterResult.Failure(CreateSendInputMessage(actionDescription));
+            return CreateSendInputFailure(actionDescription);
         }
 
         if (sent != inputs.Length)
         {
             return InputAdapterResult.Failure(
+                InputFailureKind.PartialInjection,
                 $"Windows injected only {sent} of {inputs.Length} input events while trying to {actionDescription}. {SendInputFailurePrefix}");
         }
 
         return InputAdapterResult.Success();
     }
 
-    private static string CreateSendInputMessage(string actionDescription)
+    private static InputAdapterResult CreateSendInputFailure(string actionDescription)
     {
         var lastError = Marshal.GetLastWin32Error();
-        return lastError == 0
+        var message = lastError == 0
             ? $"Failed to {actionDescription}. {SendInputFailurePrefix}"
             : $"Failed to {actionDescription}. {SendInputFailurePrefix} Win32 error {lastError}: {new Win32Exception(lastError).Message}";
+        var failureKind = lastError == 5
+            ? InputFailureKind.ElevatedTarget
+            : InputFailureKind.BlockedByWindows;
+        return InputAdapterResult.Failure(failureKind, message);
     }
 
     private static string CreateWin32Message(string prefix)
