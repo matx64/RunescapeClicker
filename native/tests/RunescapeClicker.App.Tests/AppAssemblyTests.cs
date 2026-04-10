@@ -15,5 +15,6 @@ public sealed class AppAssemblyTests
     {
         RunescapeClicker.App.AppEnvironment.Summary.Should().Contain("RunescapeClicker.Core");
         RunescapeClicker.App.AppEnvironment.Summary.Should().Contain("RunescapeClicker.Automation.Windows");
+        RunescapeClicker.App.AppEnvironment.Summary.Should().Contain("Phase 2 execution core");
     }
 }

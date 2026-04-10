@@ -4,7 +4,7 @@
 - Rewrite the app as a Windows-only native desktop application in C# with WinUI 3, with a clean-break .NET solution and no Linux compatibility work.
 - Follow an execution-first migration: extract the automation engine into a testable C# core before any UI rebuild, then rebuild the interface entirely with native WinUI 3 controls.
 - Ground truth today: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`).
-- Current migration status: Phase 0 and Phase 1 are complete as of April 10, 2026. The repo now contains a validated native bootstrap at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
+- Current migration status: Phases 0, 1, and 2 are complete as of April 10, 2026. The repo now contains a validated native bootstrap and execution core at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
 
 **Target Architecture And Public Interfaces**
 - New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, and `RunescapeClicker.App.Tests`.
@@ -18,7 +18,7 @@
 **Execution Status**
 - Phase 0: Completed on April 10, 2026.
 - Phase 1: Completed on April 10, 2026.
-- Phase 2: Pending.
+- Phase 2: Completed on April 10, 2026.
 - Phase 3: Pending.
 - Phase 4: Pending.
 - Phase 5: Pending.
@@ -58,13 +58,21 @@
   - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
   - `dotnet publish native/src/RunescapeClicker.App/RunescapeClicker.App.csproj -c Release -p:Platform=x64 -r win-x64 -p:PublishProfile=win-x64`
 
-**Phase 2: Extract And Rebuild The Execution Engine First**
-1. Port the executor concepts from Rust into `RunescapeClicker.Core`: cancellable sleep, looping sequence runner, stop conditions, structured failure reporting, and humanized mouse movement.
-2. Redesign timing behavior into an explicit `ExecutionProfile` instead of scattered constants so the engine can evolve without UI rewrites.
-3. Preserve action types but not Rust internals: keep mouse/key/delay semantics, while allowing a cleaner C# implementation of movement interpolation, jitter policy, and key normalization.
-4. Build fake `IInputAdapter` and fake time/random providers so the engine is fully testable without real mouse or keyboard injection.
-5. Port all executor coverage from `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)` to C#: backend failure, stop during delay, stop during movement, click failure after move, same-position click delay, empty sequence, and bounded mouse interpolation.
-6. Exit criterion: the C# core passes the ported contract suite before any WinUI screen is treated as feature-complete.
+**Phase 2: Extract And Rebuild The Execution Engine First (Completed April 10, 2026)**
+1. [x] Port the executor concepts from Rust into `RunescapeClicker.Core`: cancellable sleep, looping sequence runner, stop conditions, structured failure reporting, and humanized mouse movement.
+2. [x] Redesign timing behavior into an explicit `ExecutionProfile` instead of scattered constants so the engine can evolve without UI rewrites.
+3. [x] Preserve action types but not Rust internals: keep mouse/key/delay semantics, while allowing a cleaner C# implementation of movement interpolation, jitter policy, and key normalization.
+4. [x] Build fake `IInputAdapter` and fake time/random providers so the engine is fully testable without real mouse or keyboard injection.
+5. [x] Port all executor coverage from `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)` to C#: backend failure, stop during delay, stop during movement, click failure after move, same-position click delay, empty sequence, and bounded mouse interpolation.
+6. [x] Exit criterion: the C# core passes the ported contract suite before any WinUI screen is treated as feature-complete.
+
+**Phase 2 Completion Notes**
+- `RunescapeClicker.Core` now exposes immutable engine contracts for `AutomationAction`, `MouseClickAction`, `KeyPressAction`, `DelayAction`, `StopCondition`, `RunRequest`, `ExecutionProfile`, `RunEvent`, `RunResult`, `RunOutcome`, `EngineError`, `EngineErrorCode`, `ScreenPoint`, `IClickerEngine`, and `IInputAdapter`.
+- The Phase 2 engine now runs the looping action sequence asynchronously through `IClickerEngine.ExecuteAsync(RunRequest, IProgress<RunEvent>, CancellationToken)` with typed outcomes, structured engine faults, cancellable delay handling, and deterministic test seams for fake input and runtime control.
+- The C# executor port preserves the Rust behavior contract for anti-detect delays, delay jitter, timer stopping, stop-during-delay, stop-during-movement, post-move click delay, same-position click delay, bounded movement interpolation, and direct move fallback when cursor position cannot be read.
+- Key input is now represented as canonical Windows metadata in `KeyPressAction` instead of free-form text while keeping the future Windows automation layer platform-neutral in core.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
 
 **Phase 3: Implement Windows-Native Automation Services**
 1. Build `WindowsInputAdapter` on `SendInput` and `GetCursorPos`, with explicit handling for zero-event injection, blocked input, and integrity-level/UIPI failures.

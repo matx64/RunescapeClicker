@@ -13,9 +13,9 @@
 
     <Grid Padding="32">
         <StackPanel Spacing="12">
-            <TextBlock Text="Runescape Clicker Native Bootstrap"
+            <TextBlock Text="Runescape Clicker Native Core"
                        Style="{ThemeResource TitleLargeTextBlockStyle}" />
-            <TextBlock Text="Phase 1 scaffolding is in place. Core behavior ports start in Phase 2."
+            <TextBlock Text="Phase 2 execution contracts and engine behavior are in place. Windows automation services and the full native workflow arrive in later phases."
                        TextWrapping="WrapWholeWords" />
             <TextBlock x:Name="StatusText"
                        TextWrapping="WrapWholeWords" />
