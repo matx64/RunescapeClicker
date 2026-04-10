@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.Core.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.App.Tests", "tests\RunescapeClicker.App.Tests\RunescapeClicker.App.Tests.csproj", "{26CB0B48-C10F-457D-BBFE-6B7085A80960}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunescapeClicker.Automation.Windows.Tests", "tests\RunescapeClicker.Automation.Windows.Tests\RunescapeClicker.Automation.Windows.Tests.csproj", "{B686C849-2745-47FB-9EE4-C3D64D6C3FB4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -43,6 +45,10 @@ Global
 		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Debug|x64.Build.0 = Debug|x64
 		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Release|x64.ActiveCfg = Release|x64
 		{26CB0B48-C10F-457D-BBFE-6B7085A80960}.Release|x64.Build.0 = Release|x64
+		{B686C849-2745-47FB-9EE4-C3D64D6C3FB4}.Debug|x64.ActiveCfg = Debug|x64
+		{B686C849-2745-47FB-9EE4-C3D64D6C3FB4}.Debug|x64.Build.0 = Debug|x64
+		{B686C849-2745-47FB-9EE4-C3D64D6C3FB4}.Release|x64.ActiveCfg = Release|x64
+		{B686C849-2745-47FB-9EE4-C3D64D6C3FB4}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -53,5 +59,6 @@ Global
 		{CAE549EA-F766-4F70-9B0E-8D591C94FB13} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{ED85510C-F0E1-4F6E-961E-514C504375E9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{26CB0B48-C10F-457D-BBFE-6B7085A80960} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{B686C849-2745-47FB-9EE4-C3D64D6C3FB4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

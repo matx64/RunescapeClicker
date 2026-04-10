@@ -11,14 +11,119 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Padding="32">
-        <StackPanel Spacing="12">
-            <TextBlock Text="Runescape Clicker Native Core"
-                       Style="{ThemeResource TitleLargeTextBlockStyle}" />
-            <TextBlock Text="Phase 2 execution contracts and engine behavior are in place. Windows automation services and the full native workflow arrive in later phases."
-                       TextWrapping="WrapWholeWords" />
-            <TextBlock x:Name="StatusText"
-                       TextWrapping="WrapWholeWords" />
-        </StackPanel>
-    </Grid>
+    <ScrollViewer>
+        <Grid Padding="28"
+              RowSpacing="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="Runescape Clicker Phase 3 Harness"
+                           Style="{ThemeResource TitleLargeTextBlockStyle}" />
+                <TextBlock x:Name="SummaryText"
+                           TextWrapping="WrapWholeWords" />
+                <InfoBar x:Name="StatusBar"
+                         IsOpen="True"
+                         Severity="Informational"
+                         IsClosable="False"
+                         Message="Initializing the native automation harness..." />
+            </StackPanel>
+
+            <Grid Grid.Row="1"
+                  ColumnSpacing="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Spacing="16">
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Automation Services"
+                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                            <TextBlock x:Name="HotkeyStatusText"
+                                       TextWrapping="WrapWholeWords" />
+                            <TextBlock x:Name="LastHotkeyText"
+                                       TextWrapping="WrapWholeWords" />
+                            <Button x:Name="RetryHotkeysButton"
+                                    Content="Retry Hotkeys"
+                                    Click="RetryHotkeysButton_Click" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Coordinate Capture"
+                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                            <TextBlock x:Name="PickedCoordinateText"
+                                       Text="Picked coordinate: none"
+                                       TextWrapping="WrapWholeWords" />
+                            <Button x:Name="CaptureCursorButton"
+                                    Content="Capture Current Cursor (F1)"
+                                    Click="CaptureCursorButton_Click" />
+                            <Button x:Name="PickOnScreenButton"
+                                    Content="Pick On Screen"
+                                    Click="PickOnScreenButton_Click" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Spacing="16">
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Engine Smoke Runner"
+                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                            <TextBlock x:Name="RunStatusText"
+                                       TextWrapping="WrapWholeWords" />
+                            <ProgressRing x:Name="RunProgressRing"
+                                          Width="28"
+                                          Height="28"
+                                          IsActive="False" />
+                            <Button x:Name="StartSafeSmokeButton"
+                                    Content="Start Safe F24 Smoke"
+                                    Click="StartSafeSmokeButton_Click" />
+                            <Button x:Name="RunMouseSmokeButton"
+                                    Content="Run Opt-In Mouse Smoke"
+                                    Click="RunMouseSmokeButton_Click" />
+                            <Button x:Name="StopRunButton"
+                                    Content="Stop Run (F2)"
+                                    Click="StopRunButton_Click" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Live Log"
+                                       Style="{ThemeResource TitleMediumTextBlockStyle}" />
+                            <TextBox x:Name="LogTextBox"
+                                     Height="320"
+                                     IsReadOnly="True"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
 </Window>

@@ -4,10 +4,10 @@
 - Rewrite the app as a Windows-only native desktop application in C# with WinUI 3, with a clean-break .NET solution and no Linux compatibility work.
 - Follow an execution-first migration: extract the automation engine into a testable C# core before any UI rebuild, then rebuild the interface entirely with native WinUI 3 controls.
 - Ground truth today: `[old-version/src/app.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/app.rs)` is a 1,541-line mixed UI/orchestration file, `[old-version/src/executor.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/src/executor.rs)` already contains a reusable execution seam, and all current Rust tests passed on April 10, 2026 (`61/61`, including `[old-version/tests/executor_integration.rs](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version/tests/executor_integration.rs)`).
-- Current migration status: Phases 0, 1, and 2 are complete as of April 10, 2026. The repo now contains a validated native bootstrap and execution core at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
+- Current migration status: Phases 0, 1, 2, and 3 are complete as of April 10, 2026. The repo now contains a validated native bootstrap, execution core, and Windows automation harness at `[native/RunescapeClicker.sln](C:/Users/mathe/Documents/dev/RunescapeClicker/native/RunescapeClicker.sln)` while `[old-version](C:/Users/mathe/Documents/dev/RunescapeClicker/old-version)` remains the frozen Rust reference.
 
 **Target Architecture And Public Interfaces**
-- New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, and `RunescapeClicker.App.Tests`.
+- New solution layout: `/native/RunescapeClicker.sln`, with `RunescapeClicker.Core`, `RunescapeClicker.Automation.Windows`, `RunescapeClicker.App`, `RunescapeClicker.Core.Tests`, `RunescapeClicker.Automation.Windows.Tests`, and `RunescapeClicker.App.Tests`.
 - `RunescapeClicker.Core` owns immutable contracts only: `AutomationAction` base record, `MouseClickAction`, `KeyPressAction`, `DelayAction`, `MouseButtonKind`, `StopCondition`, `RunRequest`, `ExecutionProfile`, `RunEvent`, `RunResult`, and `EngineError`.
 - `KeyPressAction` stores canonical Windows key metadata, not free-form text: `VirtualKey`, display label, scan code, and extended-key flag.
 - `RunRequest` is the only UI-to-engine input: ordered action list, stop condition, and execution profile.
@@ -19,7 +19,7 @@
 - Phase 0: Completed on April 10, 2026.
 - Phase 1: Completed on April 10, 2026.
 - Phase 2: Completed on April 10, 2026.
-- Phase 3: Pending.
+- Phase 3: Completed on April 10, 2026.
 - Phase 4: Pending.
 - Phase 5: Pending.
 - Phase 6: Pending.
@@ -74,12 +74,21 @@
 - Validation completed successfully on April 10, 2026:
   - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
 
-**Phase 3: Implement Windows-Native Automation Services**
-1. Build `WindowsInputAdapter` on `SendInput` and `GetCursorPos`, with explicit handling for zero-event injection, blocked input, and integrity-level/UIPI failures.
-2. Build `GlobalHotkeyService` on `RegisterHotKey` plus `WM_HOTKEY`, using fixed defaults of `F1` for cursor capture and `F2` for stop, with `MOD_NOREPEAT` and deterministic unregister on shutdown.
-3. Build `CoordinatePickerService` as a dedicated topmost borderless overlay window that darkens the screen, shows a crosshair, captures click coordinates, and cancels on `Esc`.
-4. Route all HWND/message-loop work through a single interop boundary so WinUI view models never process raw window messages.
-5. Add manual smoke harnesses for real hotkeys and real input injection, because those behaviors should not run in CI.
+**Phase 3: Implement Windows-Native Automation Services (Completed April 10, 2026)**
+1. [x] Build `WindowsInputAdapter` on `SendInput` and `GetCursorPos`, with explicit handling for zero-event injection, blocked input, and integrity-level/UIPI failures.
+2. [x] Build `GlobalHotkeyService` on `RegisterHotKey` plus `WM_HOTKEY`, using fixed defaults of `F1` for cursor capture and `F2` for stop, with `MOD_NOREPEAT` and deterministic unregister on shutdown.
+3. [x] Build `CoordinatePickerService` as a dedicated topmost borderless overlay window that darkens the screen, shows a crosshair, captures click coordinates, and cancels on `Esc`.
+4. [x] Route all HWND/message-loop work through a single interop boundary so WinUI view models never process raw window messages.
+5. [x] Add manual smoke harnesses for real hotkeys and real input injection, because those behaviors should not run in CI.
+
+**Phase 3 Completion Notes**
+- `[native/src/RunescapeClicker.Automation.Windows](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.Automation.Windows)` now contains `WindowsInputAdapter`, `GlobalHotkeyService`, `CoordinatePickerService`, the shared Win32/Forms interop host, typed hotkey and picker contracts, and a `WindowsAutomationServices` composition root for the app layer.
+- `[native/src/RunescapeClicker.App/MainWindow.xaml](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml)` and `[native/src/RunescapeClicker.App/MainWindow.xaml.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/MainWindow.xaml.cs)` now provide a Phase 3 debug harness that registers real hotkeys, captures coordinates through `F1` or the overlay picker, runs a low-risk repeating `F24` smoke request through the real engine, and exposes an explicit opt-in mouse smoke action with confirmation and countdown.
+- The app-side composition helper now lives in `[native/src/RunescapeClicker.App/Phase3HarnessComposition.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/Phase3HarnessComposition.cs)` and the smoke request builders now live in `[native/src/RunescapeClicker.App/SmokeRunFactory.cs](C:/Users/mathe/Documents/dev/RunescapeClicker/native/src/RunescapeClicker.App/SmokeRunFactory.cs)`.
+- Automated Windows service coverage now lives in `[native/tests/RunescapeClicker.Automation.Windows.Tests](C:/Users/mathe/Documents/dev/RunescapeClicker/native/tests/RunescapeClicker.Automation.Windows.Tests)`, covering input adapter behavior, hotkey registration/message translation, and picker session semantics.
+- Validation completed successfully on April 10, 2026:
+  - `dotnet test native/RunescapeClicker.sln -c Debug -p:Platform=x64`
+- Manual smoke execution remains a required local follow-up because real global hotkeys, overlay capture, and input injection are intentionally not exercised in CI; the harness exists specifically to run that checklist on a Windows desktop.
 
 **Phase 4: Build The Application Layer And State Model**
 1. Create `MainViewModel`, `ActionComposerViewModel`, `ActionListViewModel`, `RunPanelViewModel`, and `StatusViewModel`, backed by a single in-memory session store.

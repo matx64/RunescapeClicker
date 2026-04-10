@@ -1,0 +1,5 @@
+SendInput
+GetCursorPos
+RegisterHotKey
+UnregisterHotKey
+GetSystemMetrics

@@ -6,9 +6,8 @@ namespace RunescapeClicker.Core.Tests;
 public sealed class AssemblyMarkerTests
 {
     [Fact]
-    public void PhaseMarkerIdentifiesTheExecutionCoreMilestone()
+    public void PhaseMarkerIdentifiesTheCurrentNativeMilestone()
     {
-        AssemblyMarker.Phase.Should().Be("Phase2");
+        AssemblyMarker.Phase.Should().Be("Phase3");
     }
 }
-
